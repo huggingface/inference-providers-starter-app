@@ -21,8 +21,10 @@ Minimal Next.js + shadcn template that demonstrates how to stream chat responses
 ## Project structure
 
 - `src/app/page.tsx` – Landing page that introduces streaming and renders the demo card.
-- `src/components/chat-demo.tsx` – Client component that posts prompts to the API route, consumes the readable stream, and updates the UI token-by-token.
-- `src/app/api/chat/route.ts` – Serverless endpoint that forwards chat completions to `https://router.huggingface.co/v1` via `OpenAI.chat.completions.create({ stream: true })` and relays the chunks back to the browser.
+- `src/components/chat-demo.tsx` – Client component that posts prompts to the streaming API route and updates the UI token-by-token.
+- `src/components/structured-demo.tsx` – Minimal JSON-schema example that renders structured output returned by the router.
+- `src/app/api/chat/route.ts` – Endpoint that forwards chat completions to `https://router.huggingface.co/v1` via `OpenAI.chat.completions.create({ stream: true })` and relays the chunks back to the browser.
+- `src/app/api/structured/route.ts` – Non-streaming endpoint demonstrating `response_format` with a strict JSON schema.
 - `src/components/ui/*` – Minimal shadcn-inspired primitives (button, card, textarea, label) styled with Hugging Face colors.
 
 ## Customising the demo

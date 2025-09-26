@@ -1,4 +1,5 @@
 import { ChatDemo } from "@/components/chat-demo";
+import { StructuredOutputDemo } from "@/components/structured-demo";
 
 export default function Home() {
   return (
@@ -9,7 +10,7 @@ export default function Home() {
             Hugging Face Inference Providers
           </p>
           <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            Streaming chat with the OpenAI client
+          Streaming chat with the OpenAI client
           </h1>
           <p className="text-sm text-white/60">
             Drop a prompt below and watch tokens arrive from the router in real time. No fluff, just the pieces you need
@@ -17,7 +18,10 @@ export default function Home() {
           </p>
         </div>
 
-        <ChatDemo />
+        <div className="space-y-8">
+          <ChatDemo />
+          <StructuredOutputDemo />
+        </div>
       </div>
     </main>
   );
