@@ -1,12 +1,9 @@
 @import "tailwindcss";
 
 :root {
-  --background: #080b12;
-  --foreground: #f7f9ff;
-  --hf-yellow: #ffb100;
-  --hf-pink: #ff7ad3;
-  --hf-blue: #1d3f72;
-  --hf-violet: #5639c6;
+  --background: #0f1117;
+  --foreground: #f5f7fa;
+  --accent: #ffb100;
 }
 
 @theme inline {
@@ -18,20 +15,8 @@
 
 body {
   min-height: 100vh;
-  background:
-    radial-gradient(120% 120% at 20% 20%, rgba(255, 177, 0, 0.18), transparent 70%),
-    radial-gradient(120% 120% at 80% 10%, rgba(255, 122, 211, 0.22), transparent 65%),
-    radial-gradient(140% 120% at 50% 100%, rgba(22, 56, 109, 0.5), transparent 80%),
-    var(--background);
+  background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
-}
-
-* {
-  border-color: rgba(255, 255, 255, 0.08);
-}
-
-::selection {
-  background: rgba(255, 177, 0, 0.25);
 }

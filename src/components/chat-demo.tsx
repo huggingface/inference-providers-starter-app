@@ -13,7 +13,7 @@ const MODEL_NAME = "deepseek-ai/DeepSeek-V3.1:fireworks-ai";
 
 export function ChatDemo() {
   const [prompt, setPrompt] = useState(
-    "Explain how streaming responses from Hugging Face Inference Providers keeps the UI feeling real-time.",
+    "Give me a two sentence pitch for streaming via Hugging Face Inference Providers.",
   );
   const [response, setResponse] = useState("");
   const [status, setStatus] = useState<StreamStatus>("idle");
@@ -119,10 +119,8 @@ export function ChatDemo() {
   return (
     <Card className="w-full max-w-2xl text-white">
       <CardHeader>
-        <CardTitle>Streaming text with Hugging Face</CardTitle>
-        <CardDescription>
-          Follow the chunks as they arrive from the Inference Provider router via the OpenAI SDK.
-        </CardDescription>
+        <CardTitle>Streaming demo</CardTitle>
+        <CardDescription>Send a prompt. The response streams back token by token.</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-6">
@@ -137,18 +135,18 @@ export function ChatDemo() {
             />
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-            <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-[0.16em] text-white/50">
-              <span>Live response</span>
+          <div className="rounded-xl bg-[#1a1e2b] p-4">
+            <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-[0.14em] text-white/40">
+              <span>Output</span>
               <span>{MODEL_NAME}</span>
             </div>
             <div
               className={cn(
-                "min-h-[160px] whitespace-pre-wrap text-sm leading-6 text-white",
-                status === "idle" && !response ? "text-white/40" : undefined,
+                "min-h-[140px] whitespace-pre-wrap text-sm leading-6 text-white",
+                status === "idle" && !response ? "text-white/35" : undefined,
               )}
             >
-              {response || "Waiting for the next generation..."}
+              {response || "Waiting for tokens..."}
             </div>
           </div>
 
