@@ -56,8 +56,24 @@ export function ChatDemo() {
         signal: controller.signal,
       });
 
-      if (!res.ok || !res.body) {
-        throw new Error("The server did not return a readable stream.");
+      if (!res.ok) {
+        const errorPayload = await res.text();
+        let message = `Request failed with status ${res.status}`;
+        try {
+          const parsed = JSON.parse(errorPayload);
+          if (parsed && typeof parsed.error === "string") {
+            message = parsed.error;
+          }
+        } catch {
+          if (errorPayload) {
+            message = errorPayload;
+          }
+        }
+        throw new Error(message);
+      }
+
+      if (!res.body) {
+        throw new Error("Streaming isn't supported in this environment.");
       }
 
       const reader = res.body.getReader();
