@@ -5,11 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { MODEL_NAME } from "@/config/model";
 import { cn } from "@/lib/utils";
 
 type StreamStatus = "idle" | "streaming" | "error";
-
-const MODEL_NAME = "deepseek-ai/DeepSeek-V3.1:fireworks-ai";
 
 export function ChatDemo() {
   const [prompt, setPrompt] = useState(
@@ -124,6 +123,13 @@ export function ChatDemo() {
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-6">
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.14em] text-white/40">
+            <span>Model</span>
+            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-white/60">
+              {MODEL_NAME}
+            </span>
+          </div>
+
           <div className="space-y-3">
             <Label htmlFor="prompt">Ask anything</Label>
             <Textarea
@@ -136,10 +142,7 @@ export function ChatDemo() {
           </div>
 
           <div className="rounded-xl bg-[#1a1e2b] p-4">
-            <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-[0.14em] text-white/40">
-              <span>Output</span>
-              <span>{MODEL_NAME}</span>
-            </div>
+            <div className="mb-2 text-[10px] uppercase tracking-[0.14em] text-white/40">Output</div>
             <div
               className={cn(
                 "min-h-[140px] whitespace-pre-wrap text-sm leading-6 text-white",

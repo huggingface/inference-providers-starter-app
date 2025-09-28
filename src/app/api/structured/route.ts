@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 import { OpenAI } from "openai";
-
-const MODEL_NAME = "deepseek-ai/DeepSeek-V3.1:fireworks-ai";
+import { MODEL_NAME } from "@/config/model";
 
 const schema = {
   name: "streamingSummary",

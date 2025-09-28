@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { OpenAI } from "openai";
-
-const MODEL_NAME = "deepseek-ai/DeepSeek-V3.1:fireworks-ai";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import { MODEL_NAME } from "@/config/model";
 
 export const runtime = "nodejs";
 
@@ -39,8 +39,7 @@ export async function POST(req: NextRequest) {
 
   const messages =
     typeof payload === "object" && payload !== null && "messages" in payload
-      ? (payload as { messages: Array<{ role: string; content: string }> })
-          .messages
+      ? (payload as { messages: ChatCompletionMessageParam[] }).messages
       : null;
 
   if (!Array.isArray(messages) || messages.length === 0) {

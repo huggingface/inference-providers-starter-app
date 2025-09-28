@@ -1,5 +1,6 @@
 import { ChatDemo } from "@/components/chat-demo";
 import { StructuredOutputDemo } from "@/components/structured-demo";
+import { MODEL_NAME } from "@/config/model";
 
 export default function Home() {
   const streamingSnippet = `import { OpenAI } from "openai";
@@ -10,7 +11,7 @@ const client = new OpenAI({
 });
 
 const stream = await client.chat.completions.create({
-  model: "deepseek-ai/DeepSeek-V3.1:fireworks-ai",
+  model: "${MODEL_NAME}",
   messages: [{ role: "user", content: "Explain streaming." }],
   stream: true,
 });
@@ -21,7 +22,7 @@ for await (const chunk of stream) {
 
   const structuredSnippet = `// reuse the same client config as above
 const result = await client.chat.completions.create({
-  model: "deepseek-ai/DeepSeek-V3.1:fireworks-ai",
+  model: "${MODEL_NAME}",
   messages: [
     { role: "system", content: "Return JSON only." },
     { role: "user", content: "Summarize the talk for PMs." },

@@ -29,7 +29,7 @@ Minimal Next.js + shadcn template that demonstrates how to stream chat responses
 
 ## Customising the demo
 
-- Switch providers by changing `MODEL_NAME` in `src/app/api/chat/route.ts`.
+- Switch providers by changing `MODEL_NAME` in `src/config/model.ts`.
 - Add system or assistant messages by editing the `messages` array in `src/components/chat-demo.tsx`.
 - Extend the UI with additional shadcn components as you explore structured outputs, tool invocation, or trace visualisations.
 
