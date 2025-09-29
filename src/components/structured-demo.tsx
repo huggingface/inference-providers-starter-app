@@ -16,8 +16,10 @@ export function StructuredOutputDemo({ model }: StructuredOutputDemoProps) {
     "Summarize the streaming behavior for product managers, include the audience and two bullet takeaways.",
   );
   const [result, setResult] = useState<object | null>(null);
+  const [raw, setRaw] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [schemaHint, setSchemaHint] = useState<string | null>(null);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -28,6 +30,8 @@ export function StructuredOutputDemo({ model }: StructuredOutputDemoProps) {
     setStatus("loading");
     setMessage(null);
     setResult(null);
+    setRaw(null);
+    setSchemaHint(null);
 
     try {
       const effectiveModel = model || MODEL_NAME;
@@ -57,13 +61,16 @@ export function StructuredOutputDemo({ model }: StructuredOutputDemoProps) {
       }
 
       const json = await res.json();
-      if (json && typeof json.data === "object") {
-        setResult(json.data);
-        setMessage("Structured output ready.");
-        setStatus("idle");
-      } else {
-        throw new Error("Unexpected response payload.");
-      }
+      const data = json && typeof json === "object" ? json.data : undefined;
+      const rawText = json && typeof json === "object" ? json.raw : undefined;
+      const metaMessage = json?.meta?.message as string | undefined;
+      const metaSchemaError = json?.meta?.schemaError as string | undefined;
+
+      setResult(data && typeof data === "object" ? data : null);
+      setRaw(typeof rawText === "string" && rawText.length ? rawText : null);
+      setSchemaHint(metaSchemaError || null);
+      setMessage(metaMessage || "Structured output ready.");
+      setStatus("idle");
     } catch (error) {
       if (error instanceof Error) {
         setMessage(error.message);
@@ -73,6 +80,10 @@ export function StructuredOutputDemo({ model }: StructuredOutputDemoProps) {
       setStatus("error");
     }
   }
+
+  const displayText = result
+    ? JSON.stringify(result, null, 2)
+    : raw ?? "Waiting for structured output...";
 
   return (
     <Card className="w-full max-w-2xl text-white">
@@ -103,12 +114,17 @@ export function StructuredOutputDemo({ model }: StructuredOutputDemoProps) {
           <div className="rounded-xl bg-[#1a1e2b] p-4">
             <div className="mb-2 text-[10px] uppercase tracking-[0.14em] text-white/40">JSON</div>
             <pre className="max-h-60 overflow-auto whitespace-pre-wrap text-left text-xs leading-6 text-white/80">
-              {result ? JSON.stringify(result, null, 2) : "Waiting for structured output..."}
+              {displayText}
             </pre>
           </div>
 
           {message ? (
             <p className={`text-sm ${status === "error" ? "text-[#ff8080]" : "text-white/60"}`}>{message}</p>
+          ) : null}
+          {schemaHint ? (
+            <p className="text-xs text-white/40">
+              {schemaHint} — try a schema-aware provider like <code>meta-llama/Meta-Llama-3-8B-Instruct</code>.
+            </p>
           ) : null}
         </CardContent>
         <CardFooter className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -116,7 +132,7 @@ export function StructuredOutputDemo({ model }: StructuredOutputDemoProps) {
             {status === "loading" ? "Generating JSON..." : "Generate JSON"}
           </Button>
           <p className="text-xs text-white/40">
-            Uses the same client with `response_format` to lock the schema.
+            Uses the same client with `response_format` to lock the schema when supported.
           </p>
         </CardFooter>
       </form>

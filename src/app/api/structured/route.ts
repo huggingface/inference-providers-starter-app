@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { OpenAI } from "openai";
+import { APIError } from "openai/error";
 import { MODEL_NAME } from "@/config/model";
 
 const schema = {
@@ -76,26 +77,56 @@ export async function POST(req: NextRequest) {
     baseURL: "https://router.huggingface.co/v1",
   });
 
+  const chosenModel = overrideModel && overrideModel.trim() ? overrideModel.trim() : MODEL_NAME;
+
   try {
-    const completion = await client.chat.completions.create({
-      model: overrideModel && overrideModel.trim() ? overrideModel : MODEL_NAME,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a helpful assistant that returns concise JSON meeting the provided schema. Do not include markdown.",
+    let usedSchema = true;
+    let schemaErrorMessage: string | undefined;
+
+    let completion;
+    try {
+      completion = await client.chat.completions.create({
+        model: chosenModel,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a helpful assistant that returns concise JSON meeting the provided schema. Do not include markdown.",
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: schema,
         },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: schema,
-      },
-      temperature: 0.2,
-    });
+        temperature: 0.2,
+      });
+    } catch (innerError) {
+      if (innerError instanceof APIError && innerError.status === 400) {
+        usedSchema = false;
+        schemaErrorMessage = innerError.error?.message || innerError.message;
+        completion = await client.chat.completions.create({
+          model: chosenModel,
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are a helpful assistant that returns compact JSON matching this schema: { headline: string, audience: string, takeaways: string[] }. If you cannot comply, explain why.",
+            },
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
+          temperature: 0.2,
+        });
+      } else {
+        throw innerError;
+      }
+    }
 
     const content = completion.choices[0]?.message?.content;
     if (!content) {
@@ -103,22 +134,47 @@ export async function POST(req: NextRequest) {
     }
 
     let parsed: unknown;
+    let parsedSuccessfully = false;
     try {
       parsed = JSON.parse(content);
+      parsedSuccessfully = true;
     } catch {
-      throw new Error("The model response was not valid JSON.");
+      if (usedSchema) {
+        throw new Error("The model response was not valid JSON.");
+      }
     }
 
-    return new Response(JSON.stringify({ data: parsed }), {
+    const responsePayload = {
+      data: parsedSuccessfully ? parsed : null,
+      raw: parsedSuccessfully ? undefined : content,
+      meta: {
+        model: chosenModel,
+        usedSchema,
+        schemaError: schemaErrorMessage,
+        message: parsedSuccessfully
+          ? usedSchema
+            ? "Structured output ready."
+            : "Model returned valid JSON without enforcing the schema."
+          : "Model could not return JSON for the schema. Try a model with structured output support.",
+      },
+    } as const;
+
+    return new Response(JSON.stringify(responsePayload), {
       status: 200,
       headers: {
         "Content-Type": "application/json",
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error.";
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
+    const status = error instanceof APIError && typeof error.status === "number" ? error.status : 500;
+    const message =
+      error instanceof APIError
+        ? error.error?.message || error.message
+        : error instanceof Error
+          ? error.message
+          : "Unknown error.";
+    return new Response(JSON.stringify({ error: message || "Structured request failed." }), {
+      status,
       headers: {
         "Content-Type": "application/json",
       },

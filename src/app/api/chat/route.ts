@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { OpenAI } from "openai";
+import { APIError } from "openai/error";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { MODEL_NAME } from "@/config/model";
 
@@ -113,9 +114,15 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error.";
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
+    const status = error instanceof APIError && typeof error.status === "number" ? error.status : 500;
+    const message =
+      error instanceof APIError
+        ? error.error?.message || error.message
+        : error instanceof Error
+          ? error.message
+          : "Unknown error.";
+    return new Response(JSON.stringify({ error: message || "Streaming request failed." }), {
+      status,
       headers: {
         "Content-Type": "application/json",
       },
