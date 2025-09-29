@@ -7,7 +7,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MODEL_NAME } from "@/config/model";
 
-export function StructuredOutputDemo() {
+interface StructuredOutputDemoProps {
+  model: string;
+}
+
+export function StructuredOutputDemo({ model }: StructuredOutputDemoProps) {
   const [prompt, setPrompt] = useState(
     "Summarize the streaming behavior for product managers, include the audience and two bullet takeaways.",
   );
@@ -26,12 +30,14 @@ export function StructuredOutputDemo() {
     setResult(null);
 
     try {
+      const effectiveModel = model || MODEL_NAME;
+
       const res = await fetch("/api/structured", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt, model: effectiveModel }),
       });
 
       if (!res.ok) {
@@ -79,7 +85,7 @@ export function StructuredOutputDemo() {
           <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.14em] text-white/40">
             <span>Model</span>
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-white/60">
-              {MODEL_NAME}
+              {model || MODEL_NAME}
             </span>
           </div>
 

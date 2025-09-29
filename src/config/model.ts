@@ -1,1 +1,1 @@
-export const MODEL_NAME = "deepseek-ai/DeepSeek-V3.1:fireworks-ai" as const;
+export const MODEL_NAME = "openai/gpt-oss-120b:cerebras" as const;

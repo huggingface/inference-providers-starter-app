@@ -57,6 +57,11 @@ export async function POST(req: NextRequest) {
       ? (payload as { prompt: string }).prompt
       : undefined;
 
+  const overrideModel =
+    typeof payload === "object" && payload !== null && "model" in payload
+      ? (payload as { model?: string }).model
+      : undefined;
+
   if (!prompt || typeof prompt !== "string") {
     return new Response(JSON.stringify({ error: "Provide a prompt string." }), {
       status: 400,
@@ -73,7 +78,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const completion = await client.chat.completions.create({
-      model: MODEL_NAME,
+      model: overrideModel && overrideModel.trim() ? overrideModel : MODEL_NAME,
       messages: [
         {
           role: "system",

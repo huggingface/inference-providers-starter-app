@@ -42,6 +42,11 @@ export async function POST(req: NextRequest) {
       ? (payload as { messages: ChatCompletionMessageParam[] }).messages
       : null;
 
+  const overrideModel =
+    typeof payload === "object" && payload !== null && "model" in payload
+      ? (payload as { model?: string }).model
+      : undefined;
+
   if (!Array.isArray(messages) || messages.length === 0) {
     return new Response(
       JSON.stringify({ error: "The request body must include messages." }),
@@ -56,7 +61,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const stream = await client.chat.completions.create({
-      model: MODEL_NAME,
+      model: overrideModel && overrideModel.trim() ? overrideModel : MODEL_NAME,
       messages,
       stream: true,
     });

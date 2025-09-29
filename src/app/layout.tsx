@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Hugging Face Streaming Starter",
+  title: "HF Inference Provider Starter Kit 🤗",
   description:
     "Minimal Next.js + shadcn demo showing how to stream Hugging Face Inference Provider responses with the OpenAI client.",
 };

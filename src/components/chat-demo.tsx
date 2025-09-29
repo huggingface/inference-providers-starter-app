@@ -10,7 +10,11 @@ import { cn } from "@/lib/utils";
 
 type StreamStatus = "idle" | "streaming" | "error";
 
-export function ChatDemo() {
+interface ChatDemoProps {
+  model: string;
+}
+
+export function ChatDemo({ model }: ChatDemoProps) {
   const [prompt, setPrompt] = useState(
     "Give me a two sentence pitch for streaming via Hugging Face Inference Providers.",
   );
@@ -39,6 +43,8 @@ export function ChatDemo() {
     abortControllerRef.current = controller;
 
     try {
+      const effectiveModel = model || MODEL_NAME;
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: {
@@ -51,6 +57,7 @@ export function ChatDemo() {
               content: prompt,
             },
           ],
+          model: effectiveModel,
         }),
         signal: controller.signal,
       });
@@ -126,7 +133,7 @@ export function ChatDemo() {
           <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.14em] text-white/40">
             <span>Model</span>
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-white/60">
-              {MODEL_NAME}
+              {model || MODEL_NAME}
             </span>
           </div>
 
