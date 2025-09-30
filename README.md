@@ -1,6 +1,6 @@
 # Hugging Face Inference Providers – Streaming Starter
 
-Minimal Next.js + shadcn template that demonstrates how to stream chat responses from the Hugging Face Inference Provider router with the official OpenAI SDK. Use this project as a launchpad for richer demos (structured outputs, function calling, tools) while keeping the streaming primitives identical.
+Minimal Next.js + shadcn template that demonstrates how to stream chat completions **and** Responses API output from the Hugging Face Inference Provider router with the official OpenAI SDK. Use this project as a launchpad for richer demos (structured outputs, function calling, tools) while keeping the streaming and schema primitives identical to production code.
 
 ## Quick start
 
@@ -16,23 +16,25 @@ Minimal Next.js + shadcn template that demonstrates how to stream chat responses
    ```bash
    npm run dev
    ```
-4. Visit [http://localhost:3000](http://localhost:3000) and submit a prompt. Tokens stream into the UI as they arrive from the router.
+4. Visit [http://localhost:3000](http://localhost:3000), pick a provider, choose between **Chat Completions** and **Responses** in the API toggle, and submit a prompt. Tokens stream into the UI as they arrive from the router.
 
 ## Project structure
 
-- `src/app/page.tsx` – Landing page that introduces streaming and renders the demo card.
-- `src/components/chat-demo.tsx` – Client component that posts prompts to the streaming API route and updates the UI token-by-token.
-- `src/components/structured-demo.tsx` – Minimal JSON-schema example that renders structured output returned by the router.
-- `src/app/api/chat/route.ts` – Endpoint that forwards chat completions to `https://router.huggingface.co/v1` via `OpenAI.chat.completions.create({ stream: true })` and relays the chunks back to the browser.
-- `src/app/api/structured/route.ts` – Non-streaming endpoint demonstrating `response_format` with a strict JSON schema.
+- `src/app/page.tsx` – Landing page that introduces streaming, renders both demos, and keeps the selected API mode (Chat vs Responses) in sync across the UI and code snippets.
+- `src/components/chat-demo.tsx` – Client component that posts prompts to the streaming API route, highlights the active API mode, and updates the UI token-by-token.
+- `src/components/structured-demo.tsx` – JSON-schema example that now works with either Chat Completions or the Responses API and surfaces schema errors to the user.
+- `src/app/api/chat/route.ts` – Endpoint that forwards chat completions to `https://router.huggingface.co/v1` via `OpenAI.chat.completions.create({ stream: true })` and relays chunks back to the browser.
+- `src/app/api/responses/route.ts` – Streaming endpoint that pipes `OpenAI.responses.stream` events to the browser, including snapshot-based fallbacks for providers that omit deltas.
+- `src/app/api/structured/route.ts` – Structured output endpoint that dynamically calls `responses.create` or `chat.completions.create` based on the selected mode, parsing schema-enforced JSON (or falling back when unsupported).
 - `src/components/ui/*` – Minimal shadcn-inspired primitives (button, card, textarea, label) styled with Hugging Face colors.
 
 ## Customising the demo
 
 - Switch providers by changing `MODEL_NAME` in `src/config/model.ts`.
 - During development, type any provider ID into the `Model` field on the homepage to try it instantly across both demos.
-- Some models do not support JSON schema enforcement; when that happens the UI falls back to a best-effort JSON request and tells you to try a schema-aware model.
-- Add system or assistant messages by editing the `messages` array in `src/components/chat-demo.tsx`.
+- Use the **API mode** toggle to compare Chat Completions vs Responses end-to-end, including the snippets shown in the collapsible panels.
+- Some models do not support JSON schema enforcement; when that happens the structured demo falls back to best-effort JSON and suggests trying a schema-aware model. The Responses path also surfaces any schema errors returned by the router.
+- Add system or assistant messages by editing the `messages` array in `src/components/chat-demo.tsx`, or tweak the structured prompts in `src/components/structured-demo.tsx`.
 - Extend the UI with additional shadcn components as you explore structured outputs, tool invocation, or trace visualisations.
 
 ## Environment variables
