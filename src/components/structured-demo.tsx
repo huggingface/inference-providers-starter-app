@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MODEL_NAME } from "@/config/model";
 import type { ChatApiMode } from "@/components/chat-demo";
+import { useStructuredRequest } from "@/hooks/useStructuredRequest";
 
 interface StructuredOutputDemoProps {
   model: string;
@@ -17,78 +18,23 @@ export function StructuredOutputDemo({ model, mode }: StructuredOutputDemoProps)
   const [prompt, setPrompt] = useState(
     "Summarize the streaming behavior for product managers, include the audience and two bullet takeaways.",
   );
-  const [result, setResult] = useState<object | null>(null);
-  const [raw, setRaw] = useState<string | null>(null);
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
-  const [message, setMessage] = useState<string | null>(null);
-  const [schemaHint, setSchemaHint] = useState<string | null>(null);
+  const { result, raw, status, message, schemaHint, submit, reset } = useStructuredRequest();
 
   useEffect(() => {
-    setStatus("idle");
-    setResult(null);
-    setRaw(null);
-    setMessage(null);
-    setSchemaHint(null);
-  }, [mode]);
+    reset();
+  }, [mode, reset]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!prompt.trim() || status === "loading") {
+    if (!prompt.trim()) {
       return;
     }
 
-    setStatus("loading");
-    setMessage(null);
-    setResult(null);
-    setRaw(null);
-    setSchemaHint(null);
-
-    try {
-      const effectiveModel = model || MODEL_NAME;
-
-      const res = await fetch("/api/structured", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ prompt, model: effectiveModel, mode }),
-      });
-
-      if (!res.ok) {
-        const payload = await res.text();
-        let reason = `Request failed with status ${res.status}`;
-        try {
-          const parsed = JSON.parse(payload);
-          if (parsed && typeof parsed.error === "string") {
-            reason = parsed.error;
-          }
-        } catch {
-          if (payload) {
-            reason = payload;
-          }
-        }
-        throw new Error(reason);
-      }
-
-      const json = await res.json();
-      const data = json && typeof json === "object" ? json.data : undefined;
-      const rawText = json && typeof json === "object" ? json.raw : undefined;
-      const metaMessage = json?.meta?.message as string | undefined;
-      const metaSchemaError = json?.meta?.schemaError as string | undefined;
-
-      setResult(data && typeof data === "object" ? data : null);
-      setRaw(typeof rawText === "string" && rawText.length ? rawText : null);
-      setSchemaHint(metaSchemaError || null);
-      setMessage(metaMessage || "Structured output ready.");
-      setStatus("idle");
-    } catch (error) {
-      if (error instanceof Error) {
-        setMessage(error.message);
-      } else {
-        setMessage("Something went wrong.");
-      }
-      setStatus("error");
-    }
+    const effectiveModel = model || MODEL_NAME;
+    await submit({
+      endpoint: "/api/structured",
+      body: { prompt, model: effectiveModel, mode },
+    });
   }
 
   const displayText = result

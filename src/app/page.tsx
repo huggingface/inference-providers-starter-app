@@ -5,106 +5,14 @@ import { ChatDemo, ChatApiMode } from "@/components/chat-demo";
 import { StructuredOutputDemo } from "@/components/structured-demo";
 import { Input } from "@/components/ui/input";
 import { MODEL_NAME } from "@/config/model";
+import { buildSnippets } from "@/config/snippets";
 
 export default function Home() {
   const [model, setModel] = useState<string>(MODEL_NAME);
   const [apiMode, setApiMode] = useState<ChatApiMode>("chat");
   const activeModel = useMemo(() => (model.trim() ? model.trim() : MODEL_NAME), [model]);
-  const escapedModel = useMemo(() => activeModel.replace(/`/g, "\\`"), [activeModel]);
 
-  const streamingSnippet = useMemo(() => {
-    if (apiMode === "responses") {
-      return `import { OpenAI } from "openai";
-
-const client = new OpenAI({
-  baseURL: "https://router.huggingface.co/v1",
-  apiKey: process.env.HF_TOKEN,
-});
-
-const stream = await client.responses.stream({
-  model: "${escapedModel}",
-  input: "Explain streaming."
-});
-
-for await (const event of stream) {
-  if (event.type === "response.output_text.delta") {
-    process.stdout.write(event.delta);
-  }
-}`;
-    }
-
-    return `import { OpenAI } from "openai";
-
-const client = new OpenAI({
-  baseURL: "https://router.huggingface.co/v1",
-  apiKey: process.env.HF_TOKEN,
-});
-
-const stream = await client.chat.completions.create({
-  model: "${escapedModel}",
-  messages: [{ role: "user", content: "Explain streaming." }],
-  stream: true,
-});
-
-for await (const chunk of stream) {
-  process.stdout.write(chunk.choices[0]?.delta?.content ?? "");
-}`;
-  }, [apiMode, escapedModel]);
-
-  const structuredSnippet = useMemo(() => {
-    if (apiMode === "responses") {
-      return `// reuse the same client config as above
-const result = await client.responses.create({
-  model: "${escapedModel}",
-  input: "Summarize the talk for PMs.",
-  text: {
-    format: {
-      type: "json_schema",
-      name: "summary",
-      schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          headline: { type: "string" },
-          audience: { type: "string" },
-          takeaways: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 4 },
-        },
-        required: ["headline", "audience", "takeaways"],
-      },
-    },
-  },
-  temperature: 0.2,
-});
-
-console.log(JSON.parse(result.output_text));`;
-    }
-
-    return `// reuse the same client config as above
-const result = await client.chat.completions.create({
-  model: "${escapedModel}",
-  messages: [
-    { role: "system", content: "Return JSON only." },
-    { role: "user", content: "Summarize the talk for PMs." },
-  ],
-  response_format: {
-    type: "json_schema",
-    json_schema: {
-      name: "summary",
-      schema: {
-        type: "object",
-        properties: {
-          headline: { type: "string" },
-          takeaways: { type: "array", items: { type: "string" }, minItems: 2 },
-        },
-        required: ["headline", "takeaways"],
-      },
-      strict: true,
-    },
-  },
-});
-
-console.log(JSON.parse(result.choices[0].message?.content ?? "{}"));`;
-  }, [apiMode, escapedModel]);
+  const snippets = useMemo(() => buildSnippets(apiMode, activeModel), [apiMode, activeModel]);
 
   const toggleClass = (target: ChatApiMode) =>
     `rounded-full px-3 py-1 text-[10px] font-medium uppercase tracking-[0.16em] transition ${
@@ -163,7 +71,7 @@ console.log(JSON.parse(result.choices[0].message?.content ?? "{}"));`;
               </summary>
               <div className="mt-3">
                 <pre className="whitespace-pre-wrap rounded-lg bg-[#10121a] p-4 text-xs leading-5 text-white/80">
-                  <code>{streamingSnippet}</code>
+                  <code>{snippets.streaming}</code>
                 </pre>
               </div>
             </details>
@@ -178,7 +86,7 @@ console.log(JSON.parse(result.choices[0].message?.content ?? "{}"));`;
               </summary>
               <div className="mt-3">
                 <pre className="whitespace-pre-wrap rounded-lg bg-[#10121a] p-4 text-xs leading-5 text-white/80">
-                  <code>{structuredSnippet}</code>
+                  <code>{snippets.structured}</code>
                 </pre>
               </div>
             </details>

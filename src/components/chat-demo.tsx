@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MODEL_NAME } from "@/config/model";
 import { cn } from "@/lib/utils";
-
-type StreamStatus = "idle" | "streaming" | "error";
+import { useStreamingRequest } from "@/hooks/useStreamingRequest";
 
 export type ChatApiMode = "chat" | "responses";
 
@@ -21,124 +20,42 @@ export function ChatDemo({ model, mode }: ChatDemoProps) {
   const [prompt, setPrompt] = useState(
     "Give me a two sentence pitch for streaming via Hugging Face Inference Providers.",
   );
-  const [response, setResponse] = useState("");
-  const [status, setStatus] = useState<StreamStatus>("idle");
-  const [message, setMessage] = useState<string | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const { response, status, message, submit, cancel, reset } = useStreamingRequest();
+  const completionMessage = mode === "responses" ? "Responses stream complete." : "Streaming complete.";
 
   useEffect(() => {
-    return () => {
-      abortControllerRef.current?.abort();
-    };
-  }, []);
-
-  useEffect(() => {
-    abortControllerRef.current?.abort();
-    setStatus("idle");
-    setResponse("");
-    setMessage(null);
-  }, [mode]);
+    reset();
+  }, [mode, reset]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!prompt.trim() || status === "streaming") {
+    if (!prompt.trim()) {
       return;
     }
 
-    setResponse("");
-    setStatus("streaming");
-    setMessage(null);
+    const effectiveModel = model || MODEL_NAME;
+    const isResponses = mode === "responses";
 
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    try {
-      const effectiveModel = model || MODEL_NAME;
-
-      const isResponses = mode === "responses";
-      const res = await fetch(isResponses ? "/api/responses" : "/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(
-          isResponses
-            ? {
-                prompt,
-                model: effectiveModel,
-              }
-            : {
-                messages: [
-                  {
-                    role: "user",
-                    content: prompt,
-                  },
-                ],
-                model: effectiveModel,
+    await submit({
+      endpoint: isResponses ? "/api/responses" : "/api/chat",
+      body: isResponses
+        ? {
+            prompt,
+            model: effectiveModel,
+          }
+        : {
+            messages: [
+              {
+                role: "user" as const,
+                content: prompt,
               },
-        ),
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        const errorPayload = await res.text();
-        let message = `Request failed with status ${res.status}`;
-        try {
-          const parsed = JSON.parse(errorPayload);
-          if (parsed && typeof parsed.error === "string") {
-            message = parsed.error;
-          }
-        } catch {
-          if (errorPayload) {
-            message = errorPayload;
-          }
-        }
-        throw new Error(message);
-      }
-
-      if (!res.body) {
-        throw new Error("Streaming isn't supported in this environment.");
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-
-        const chunkValue = decoder.decode(value, { stream: true });
-        if (chunkValue) {
-          setResponse((prev) => prev + chunkValue);
-        }
-      }
-
-      setStatus("idle");
-      setMessage(mode === "responses" ? "Responses stream complete." : "Streaming complete.");
-    } catch (error) {
-      if (controller.signal.aborted) {
-        setMessage("Stream cancelled.");
-        setStatus("idle");
-      } else if (error instanceof Error) {
-        setMessage(error.message);
-        setStatus("error");
-      } else {
-        setMessage("Something went wrong.");
-        setStatus("error");
-      }
-    } finally {
-      abortControllerRef.current = null;
-    }
+            ],
+            model: effectiveModel,
+          },
+      completionMessage,
+    });
   }
-
-  function handleCancel() {
-    if (status === "streaming" && abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      setStatus("idle");
-    }
-  }
+  const handleCancel = () => cancel();
 
   return (
     <Card className="w-full max-w-2xl text-white">

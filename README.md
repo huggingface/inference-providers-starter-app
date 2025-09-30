@@ -21,11 +21,14 @@ Minimal Next.js + shadcn template that demonstrates how to stream chat completio
 ## Project structure
 
 - `src/app/page.tsx` – Landing page that introduces streaming, renders both demos, and keeps the selected API mode (Chat vs Responses) in sync across the UI and code snippets.
-- `src/components/chat-demo.tsx` – Client component that posts prompts to the streaming API route, highlights the active API mode, and updates the UI token-by-token.
-- `src/components/structured-demo.tsx` – JSON-schema example that now works with either Chat Completions or the Responses API and surfaces schema errors to the user.
+- `src/components/chat-demo.tsx` – Client component powered by a reusable streaming hook that posts prompts to the selected API route and renders tokens as they arrive.
+- `src/components/structured-demo.tsx` – JSON-schema example built on a shared structured-output hook that switches between Chat Completions and Responses while surfacing schema errors.
+- `src/hooks/useStreamingRequest.ts` – Encapsulates the fetch/abort/error state machine for streaming POST requests so multiple demos can reuse identical logic.
+- `src/hooks/useStructuredRequest.ts` – Handles JSON responses, metadata, and schema hints from the structured output endpoint.
 - `src/app/api/chat/route.ts` – Endpoint that forwards chat completions to `https://router.huggingface.co/v1` via `OpenAI.chat.completions.create({ stream: true })` and relays chunks back to the browser.
 - `src/app/api/responses/route.ts` – Streaming endpoint that pipes `OpenAI.responses.stream` events to the browser, including snapshot-based fallbacks for providers that omit deltas.
-- `src/app/api/structured/route.ts` – Structured output endpoint that dynamically calls `responses.create` or `chat.completions.create` based on the selected mode, parsing schema-enforced JSON (or falling back when unsupported).
+- `src/app/api/structured/route.ts` – Structured output endpoint that delegates schema handling to shared utilities and dynamically calls the Responses or Chat Completions API.
+- `src/server/*` – Shared server utilities (HF client factory, HTTP helpers, streaming plumbing, structured output orchestration) used by every API route.
 - `src/components/ui/*` – Minimal shadcn-inspired primitives (button, card, textarea, label) styled with Hugging Face colors.
 
 ## Customising the demo
