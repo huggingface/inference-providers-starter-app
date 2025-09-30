@@ -62,10 +62,10 @@ console.log(JSON.parse(result.choices[0].message?.content ?? "{}"));`;
             Hugging Face Inference Providers
           </p>
           <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            Stream tokens and return JSON with one client
+            Use SoTA Open LLMs with the familiar OpenAI SDK
           </h1>
           <p className="text-sm text-white/60">
-            Set the model once, then compare streaming text and structured output flows side by side.
+            Choose an open LLM, then compare streaming text and structured output flows side by side.
           </p>
           <div className="text-left">
             <label
