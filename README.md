@@ -1,4 +1,4 @@
-# Hugging Face Inference Providers – Streaming Starter
+# Hugging Face Inference Providers Starter App
 
 Minimal Next.js + shadcn template that demonstrates how to stream chat completions **and** Responses API output from the Hugging Face Inference Provider router with the official OpenAI SDK. Use this project as a launchpad for richer demos (structured outputs, function calling, tools) while keeping the streaming and schema primitives identical to production code.
 
