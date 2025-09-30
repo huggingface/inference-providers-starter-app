@@ -1,108 +1,47 @@
 import { NextRequest } from "next/server";
-import { OpenAI } from "openai";
 import { APIError } from "openai/error";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { MODEL_NAME } from "@/config/model";
+import { getHfClient, resolveModel } from "@/server/openai";
+import { readJson } from "@/server/request";
+import { jsonError } from "@/server/http";
+import { streamText } from "@/server/streaming";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
-  const token = process.env.HF_TOKEN;
-
-  if (!token) {
-    return new Response(
-      JSON.stringify({ error: "Missing HF_TOKEN environment variable." }),
-      {
-        status: 500,
-        headers: {
-          "Content-Type": "application/json",
-        },
-      },
-    );
+  const clientResult = getHfClient();
+  if (!clientResult.ok) {
+    return clientResult.response;
   }
 
-  const client = new OpenAI({
-    apiKey: token,
-    baseURL: "https://router.huggingface.co/v1",
-  });
-
-  let payload: unknown;
-  try {
-    payload = await req.json();
-  } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON body." }), {
-      status: 400,
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+  const payloadResult = await readJson<{ messages?: ChatCompletionMessageParam[]; model?: unknown }>(req);
+  if (!payloadResult.ok) {
+    return payloadResult.response;
   }
 
-  const messages =
-    typeof payload === "object" && payload !== null && "messages" in payload
-      ? (payload as { messages: ChatCompletionMessageParam[] }).messages
-      : null;
-
-  const overrideModel =
-    typeof payload === "object" && payload !== null && "model" in payload
-      ? (payload as { model?: string }).model
-      : undefined;
+  const { messages, model } = payloadResult.data ?? {};
 
   if (!Array.isArray(messages) || messages.length === 0) {
-    return new Response(
-      JSON.stringify({ error: "The request body must include messages." }),
-      {
-        status: 400,
-        headers: {
-          "Content-Type": "application/json",
-        },
-      },
-    );
+    return jsonError(400, "The request body must include messages.");
   }
 
   try {
-    const stream = await client.chat.completions.create({
-      model: overrideModel && overrideModel.trim() ? overrideModel : MODEL_NAME,
+    const stream = await clientResult.client.chat.completions.create({
+      model: resolveModel(model),
       messages,
       stream: true,
     });
 
-    const encoder = new TextEncoder();
-
-    const readableStream = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        const abortStream = () => {
-          try {
-            stream.controller.abort();
-          } catch {
-            // ignore
-          }
-          controller.close();
-        };
-
-        req.signal.addEventListener("abort", abortStream);
-
-        try {
-          for await (const chunk of stream) {
-            const content = chunk.choices[0]?.delta?.content;
-            if (content) {
-              controller.enqueue(encoder.encode(content));
-            }
-          }
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "Unexpected streaming error.";
-          controller.enqueue(encoder.encode(`\n[Stream error] ${message}`));
-        } finally {
-          req.signal.removeEventListener("abort", abortStream);
-          controller.close();
-        }
+    const readableStream = streamText({
+      req,
+      iterator: stream,
+      cancel: () => {
+        stream.controller.abort();
       },
-      cancel() {
-        try {
-          stream.controller.abort();
-        } catch {
-          // ignore
+      onChunk: (chunk, enqueue) => {
+        const content = chunk.choices[0]?.delta?.content;
+        if (content) {
+          enqueue(content);
         }
       },
     });
@@ -121,11 +60,6 @@ export async function POST(req: NextRequest) {
         : error instanceof Error
           ? error.message
           : "Unknown error.";
-    return new Response(JSON.stringify({ error: message || "Streaming request failed." }), {
-      status,
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+    return jsonError(status, message || "Streaming request failed.");
   }
 }

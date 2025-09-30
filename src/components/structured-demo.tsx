@@ -1,84 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MODEL_NAME } from "@/config/model";
+import type { ChatApiMode } from "@/components/chat-demo";
+import { useStructuredRequest } from "@/hooks/useStructuredRequest";
 
 interface StructuredOutputDemoProps {
   model: string;
+  mode: ChatApiMode;
 }
 
-export function StructuredOutputDemo({ model }: StructuredOutputDemoProps) {
+export function StructuredOutputDemo({ model, mode }: StructuredOutputDemoProps) {
   const [prompt, setPrompt] = useState(
     "Summarize the streaming behavior for product managers, include the audience and two bullet takeaways.",
   );
-  const [result, setResult] = useState<object | null>(null);
-  const [raw, setRaw] = useState<string | null>(null);
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
-  const [message, setMessage] = useState<string | null>(null);
-  const [schemaHint, setSchemaHint] = useState<string | null>(null);
+  const { result, raw, status, message, schemaHint, submit, reset } = useStructuredRequest();
+
+  useEffect(() => {
+    reset();
+  }, [mode, reset]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!prompt.trim() || status === "loading") {
+    if (!prompt.trim()) {
       return;
     }
 
-    setStatus("loading");
-    setMessage(null);
-    setResult(null);
-    setRaw(null);
-    setSchemaHint(null);
-
-    try {
-      const effectiveModel = model || MODEL_NAME;
-
-      const res = await fetch("/api/structured", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ prompt, model: effectiveModel }),
-      });
-
-      if (!res.ok) {
-        const payload = await res.text();
-        let reason = `Request failed with status ${res.status}`;
-        try {
-          const parsed = JSON.parse(payload);
-          if (parsed && typeof parsed.error === "string") {
-            reason = parsed.error;
-          }
-        } catch {
-          if (payload) {
-            reason = payload;
-          }
-        }
-        throw new Error(reason);
-      }
-
-      const json = await res.json();
-      const data = json && typeof json === "object" ? json.data : undefined;
-      const rawText = json && typeof json === "object" ? json.raw : undefined;
-      const metaMessage = json?.meta?.message as string | undefined;
-      const metaSchemaError = json?.meta?.schemaError as string | undefined;
-
-      setResult(data && typeof data === "object" ? data : null);
-      setRaw(typeof rawText === "string" && rawText.length ? rawText : null);
-      setSchemaHint(metaSchemaError || null);
-      setMessage(metaMessage || "Structured output ready.");
-      setStatus("idle");
-    } catch (error) {
-      if (error instanceof Error) {
-        setMessage(error.message);
-      } else {
-        setMessage("Something went wrong.");
-      }
-      setStatus("error");
-    }
+    const effectiveModel = model || MODEL_NAME;
+    await submit({
+      endpoint: "/api/structured",
+      body: { prompt, model: effectiveModel, mode },
+    });
   }
 
   const displayText = result
@@ -97,6 +53,11 @@ export function StructuredOutputDemo({ model }: StructuredOutputDemoProps) {
             <span>Model</span>
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-white/60">
               {model || MODEL_NAME}
+            </span>
+          </div>
+          <div className="text-[10px] uppercase tracking-[0.14em] text-white/40">
+            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-white/60">
+              {mode === "responses" ? "Responses API" : "Chat completions"}
             </span>
           </div>
 
@@ -132,7 +93,9 @@ export function StructuredOutputDemo({ model }: StructuredOutputDemoProps) {
             {status === "loading" ? "Generating JSON..." : "Generate JSON"}
           </Button>
           <p className="text-xs text-white/40">
-            Uses the same client with `response_format` to lock the schema when supported.
+            {mode === "responses"
+              ? "Uses the Responses API with a JSON schema format when supported."
+              : "Uses the Chat Completions API with response_format for schema locking."}
           </p>
         </CardFooter>
       </form>

@@ -1,126 +1,61 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MODEL_NAME } from "@/config/model";
 import { cn } from "@/lib/utils";
+import { useStreamingRequest } from "@/hooks/useStreamingRequest";
 
-type StreamStatus = "idle" | "streaming" | "error";
+export type ChatApiMode = "chat" | "responses";
 
 interface ChatDemoProps {
   model: string;
+  mode: ChatApiMode;
 }
 
-export function ChatDemo({ model }: ChatDemoProps) {
+export function ChatDemo({ model, mode }: ChatDemoProps) {
   const [prompt, setPrompt] = useState(
     "Give me a two sentence pitch for streaming via Hugging Face Inference Providers.",
   );
-  const [response, setResponse] = useState("");
-  const [status, setStatus] = useState<StreamStatus>("idle");
-  const [message, setMessage] = useState<string | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const { response, status, message, submit, cancel, reset } = useStreamingRequest();
+  const completionMessage = mode === "responses" ? "Responses stream complete." : "Streaming complete.";
 
   useEffect(() => {
-    return () => {
-      abortControllerRef.current?.abort();
-    };
-  }, []);
+    reset();
+  }, [mode, reset]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!prompt.trim() || status === "streaming") {
+    if (!prompt.trim()) {
       return;
     }
 
-    setResponse("");
-    setStatus("streaming");
-    setMessage(null);
+    const effectiveModel = model || MODEL_NAME;
+    const isResponses = mode === "responses";
 
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    try {
-      const effectiveModel = model || MODEL_NAME;
-
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: [
-            {
-              role: "user",
-              content: prompt,
-            },
-          ],
-          model: effectiveModel,
-        }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        const errorPayload = await res.text();
-        let message = `Request failed with status ${res.status}`;
-        try {
-          const parsed = JSON.parse(errorPayload);
-          if (parsed && typeof parsed.error === "string") {
-            message = parsed.error;
+    await submit({
+      endpoint: isResponses ? "/api/responses" : "/api/chat",
+      body: isResponses
+        ? {
+            prompt,
+            model: effectiveModel,
           }
-        } catch {
-          if (errorPayload) {
-            message = errorPayload;
-          }
-        }
-        throw new Error(message);
-      }
-
-      if (!res.body) {
-        throw new Error("Streaming isn't supported in this environment.");
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-
-        const chunkValue = decoder.decode(value, { stream: true });
-        if (chunkValue) {
-          setResponse((prev) => prev + chunkValue);
-        }
-      }
-
-      setStatus("idle");
-      setMessage("Streaming complete.");
-    } catch (error) {
-      if (controller.signal.aborted) {
-        setMessage("Stream cancelled.");
-        setStatus("idle");
-      } else if (error instanceof Error) {
-        setMessage(error.message);
-        setStatus("error");
-      } else {
-        setMessage("Something went wrong.");
-        setStatus("error");
-      }
-    } finally {
-      abortControllerRef.current = null;
-    }
+        : {
+            messages: [
+              {
+                role: "user" as const,
+                content: prompt,
+              },
+            ],
+            model: effectiveModel,
+          },
+      completionMessage,
+    });
   }
-
-  function handleCancel() {
-    if (status === "streaming" && abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      setStatus("idle");
-    }
-  }
+  const handleCancel = () => cancel();
 
   return (
     <Card className="w-full max-w-2xl text-white">
@@ -134,6 +69,11 @@ export function ChatDemo({ model }: ChatDemoProps) {
             <span>Model</span>
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-white/60">
               {model || MODEL_NAME}
+            </span>
+          </div>
+          <div className="text-[10px] uppercase tracking-[0.14em] text-white/40">
+            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-white/60">
+              {mode === "responses" ? "Responses API" : "Chat completions"}
             </span>
           </div>
 

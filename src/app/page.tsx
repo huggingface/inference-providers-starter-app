@@ -1,58 +1,23 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChatDemo } from "@/components/chat-demo";
+import { ChatDemo, ChatApiMode } from "@/components/chat-demo";
 import { StructuredOutputDemo } from "@/components/structured-demo";
 import { Input } from "@/components/ui/input";
 import { MODEL_NAME } from "@/config/model";
+import { buildSnippets } from "@/config/snippets";
 
 export default function Home() {
   const [model, setModel] = useState<string>(MODEL_NAME);
+  const [apiMode, setApiMode] = useState<ChatApiMode>("chat");
   const activeModel = useMemo(() => (model.trim() ? model.trim() : MODEL_NAME), [model]);
-  const escapedModel = useMemo(() => activeModel.replace(/`/g, "\\`"), [activeModel]);
 
-  const streamingSnippet = `import { OpenAI } from "openai";
+  const snippets = useMemo(() => buildSnippets(apiMode, activeModel), [apiMode, activeModel]);
 
-const client = new OpenAI({
-  baseURL: "https://router.huggingface.co/v1",
-  apiKey: process.env.HF_TOKEN,
-});
-
-const stream = await client.chat.completions.create({
-  model: "${escapedModel}",
-  messages: [{ role: "user", content: "Explain streaming." }],
-  stream: true,
-});
-
-for await (const chunk of stream) {
-  process.stdout.write(chunk.choices[0]?.delta?.content ?? "");
-}`;
-
-  const structuredSnippet = `// reuse the same client config as above
-const result = await client.chat.completions.create({
-  model: "${escapedModel}",
-  messages: [
-    { role: "system", content: "Return JSON only." },
-    { role: "user", content: "Summarize the talk for PMs." },
-  ],
-  response_format: {
-    type: "json_schema",
-    json_schema: {
-      name: "summary",
-      schema: {
-        type: "object",
-        properties: {
-          headline: { type: "string" },
-          takeaways: { type: "array", items: { type: "string" }, minItems: 2 },
-        },
-        required: ["headline", "takeaways"],
-      },
-      strict: true,
-    },
-  },
-});
-
-console.log(JSON.parse(result.choices[0].message?.content ?? "{}"));`;
+  const toggleClass = (target: ChatApiMode) =>
+    `rounded-full px-3 py-1 text-[10px] font-medium uppercase tracking-[0.16em] transition ${
+      apiMode === target ? "bg-[#ffb100] text-[#1c1c1c]" : "text-white/50 hover:text-white"
+    }`;
 
   return (
     <main className="flex min-h-screen flex-col items-center px-4 py-16">
@@ -83,26 +48,37 @@ console.log(JSON.parse(result.choices[0].message?.content ?? "{}"));`;
               />
             </label>
           </div>
+          <div className="flex flex-col gap-2 text-left sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-[10px] uppercase tracking-[0.14em] text-white/40">API mode</span>
+            <div className="inline-flex rounded-full bg-white/10 p-1">
+              <button type="button" className={toggleClass("chat")} onClick={() => setApiMode("chat")}>
+                Chat completions
+              </button>
+              <button type="button" className={toggleClass("responses")} onClick={() => setApiMode("responses")}>
+                Responses
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="space-y-12">
           <section className="mx-auto w-full max-w-2xl space-y-4 text-left">
-            <ChatDemo model={activeModel} />
+            <ChatDemo model={activeModel} mode={apiMode} />
             <details className="group rounded-xl border border-white/10 bg-[#151823] p-4">
               <summary className="flex cursor-pointer list-none items-center justify-between text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
-                <span>Streaming snippet</span>
+                <span>{apiMode === "responses" ? "Responses snippet" : "Chat completions snippet"}</span>
                 <span className="text-xs text-white/30">toggle</span>
               </summary>
               <div className="mt-3">
                 <pre className="whitespace-pre-wrap rounded-lg bg-[#10121a] p-4 text-xs leading-5 text-white/80">
-                  <code>{streamingSnippet}</code>
+                  <code>{snippets.streaming}</code>
                 </pre>
               </div>
             </details>
           </section>
 
           <section className="mx-auto w-full max-w-2xl space-y-4 text-left">
-            <StructuredOutputDemo model={activeModel} />
+            <StructuredOutputDemo model={activeModel} mode={apiMode} />
             <details className="group rounded-xl border border-white/10 bg-[#151823] p-4">
               <summary className="flex cursor-pointer list-none items-center justify-between text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
                 <span>Structured snippet</span>
@@ -110,7 +86,7 @@ console.log(JSON.parse(result.choices[0].message?.content ?? "{}"));`;
               </summary>
               <div className="mt-3">
                 <pre className="whitespace-pre-wrap rounded-lg bg-[#10121a] p-4 text-xs leading-5 text-white/80">
-                  <code>{structuredSnippet}</code>
+                  <code>{snippets.structured}</code>
                 </pre>
               </div>
             </details>
