@@ -1,17 +1,39 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChatDemo } from "@/components/chat-demo";
+import { ChatDemo, ChatApiMode } from "@/components/chat-demo";
 import { StructuredOutputDemo } from "@/components/structured-demo";
 import { Input } from "@/components/ui/input";
 import { MODEL_NAME } from "@/config/model";
 
 export default function Home() {
   const [model, setModel] = useState<string>(MODEL_NAME);
+  const [apiMode, setApiMode] = useState<ChatApiMode>("chat");
   const activeModel = useMemo(() => (model.trim() ? model.trim() : MODEL_NAME), [model]);
   const escapedModel = useMemo(() => activeModel.replace(/`/g, "\\`"), [activeModel]);
 
-  const streamingSnippet = `import { OpenAI } from "openai";
+  const streamingSnippet = useMemo(() => {
+    if (apiMode === "responses") {
+      return `import { OpenAI } from "openai";
+
+const client = new OpenAI({
+  baseURL: "https://router.huggingface.co/v1",
+  apiKey: process.env.HF_TOKEN,
+});
+
+const stream = await client.responses.stream({
+  model: "${escapedModel}",
+  input: "Explain streaming."
+});
+
+for await (const event of stream) {
+  if (event.type === "response.output_text.delta") {
+    process.stdout.write(event.delta);
+  }
+}`;
+    }
+
+    return `import { OpenAI } from "openai";
 
 const client = new OpenAI({
   baseURL: "https://router.huggingface.co/v1",
@@ -27,8 +49,37 @@ const stream = await client.chat.completions.create({
 for await (const chunk of stream) {
   process.stdout.write(chunk.choices[0]?.delta?.content ?? "");
 }`;
+  }, [apiMode, escapedModel]);
 
-  const structuredSnippet = `// reuse the same client config as above
+  const structuredSnippet = useMemo(() => {
+    if (apiMode === "responses") {
+      return `// reuse the same client config as above
+const result = await client.responses.create({
+  model: "${escapedModel}",
+  input: "Summarize the talk for PMs.",
+  text: {
+    format: {
+      type: "json_schema",
+      name: "summary",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          headline: { type: "string" },
+          audience: { type: "string" },
+          takeaways: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 4 },
+        },
+        required: ["headline", "audience", "takeaways"],
+      },
+    },
+  },
+  temperature: 0.2,
+});
+
+console.log(JSON.parse(result.output_text));`;
+    }
+
+    return `// reuse the same client config as above
 const result = await client.chat.completions.create({
   model: "${escapedModel}",
   messages: [
@@ -53,6 +104,12 @@ const result = await client.chat.completions.create({
 });
 
 console.log(JSON.parse(result.choices[0].message?.content ?? "{}"));`;
+  }, [apiMode, escapedModel]);
+
+  const toggleClass = (target: ChatApiMode) =>
+    `rounded-full px-3 py-1 text-[10px] font-medium uppercase tracking-[0.16em] transition ${
+      apiMode === target ? "bg-[#ffb100] text-[#1c1c1c]" : "text-white/50 hover:text-white"
+    }`;
 
   return (
     <main className="flex min-h-screen flex-col items-center px-4 py-16">
@@ -83,14 +140,25 @@ console.log(JSON.parse(result.choices[0].message?.content ?? "{}"));`;
               />
             </label>
           </div>
+          <div className="flex flex-col gap-2 text-left sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-[10px] uppercase tracking-[0.14em] text-white/40">API mode</span>
+            <div className="inline-flex rounded-full bg-white/10 p-1">
+              <button type="button" className={toggleClass("chat")} onClick={() => setApiMode("chat")}>
+                Chat completions
+              </button>
+              <button type="button" className={toggleClass("responses")} onClick={() => setApiMode("responses")}>
+                Responses
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="space-y-12">
           <section className="mx-auto w-full max-w-2xl space-y-4 text-left">
-            <ChatDemo model={activeModel} />
+            <ChatDemo model={activeModel} mode={apiMode} />
             <details className="group rounded-xl border border-white/10 bg-[#151823] p-4">
               <summary className="flex cursor-pointer list-none items-center justify-between text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
-                <span>Streaming snippet</span>
+                <span>{apiMode === "responses" ? "Responses snippet" : "Chat completions snippet"}</span>
                 <span className="text-xs text-white/30">toggle</span>
               </summary>
               <div className="mt-3">
@@ -102,7 +170,7 @@ console.log(JSON.parse(result.choices[0].message?.content ?? "{}"));`;
           </section>
 
           <section className="mx-auto w-full max-w-2xl space-y-4 text-left">
-            <StructuredOutputDemo model={activeModel} />
+            <StructuredOutputDemo model={activeModel} mode={apiMode} />
             <details className="group rounded-xl border border-white/10 bg-[#151823] p-4">
               <summary className="flex cursor-pointer list-none items-center justify-between text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
                 <span>Structured snippet</span>

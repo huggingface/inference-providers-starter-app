@@ -10,11 +10,14 @@ import { cn } from "@/lib/utils";
 
 type StreamStatus = "idle" | "streaming" | "error";
 
+export type ChatApiMode = "chat" | "responses";
+
 interface ChatDemoProps {
   model: string;
+  mode: ChatApiMode;
 }
 
-export function ChatDemo({ model }: ChatDemoProps) {
+export function ChatDemo({ model, mode }: ChatDemoProps) {
   const [prompt, setPrompt] = useState(
     "Give me a two sentence pitch for streaming via Hugging Face Inference Providers.",
   );
@@ -28,6 +31,13 @@ export function ChatDemo({ model }: ChatDemoProps) {
       abortControllerRef.current?.abort();
     };
   }, []);
+
+  useEffect(() => {
+    abortControllerRef.current?.abort();
+    setStatus("idle");
+    setResponse("");
+    setMessage(null);
+  }, [mode]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -45,20 +55,28 @@ export function ChatDemo({ model }: ChatDemoProps) {
     try {
       const effectiveModel = model || MODEL_NAME;
 
-      const res = await fetch("/api/chat", {
+      const isResponses = mode === "responses";
+      const res = await fetch(isResponses ? "/api/responses" : "/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          messages: [
-            {
-              role: "user",
-              content: prompt,
-            },
-          ],
-          model: effectiveModel,
-        }),
+        body: JSON.stringify(
+          isResponses
+            ? {
+                prompt,
+                model: effectiveModel,
+              }
+            : {
+                messages: [
+                  {
+                    role: "user",
+                    content: prompt,
+                  },
+                ],
+                model: effectiveModel,
+              },
+        ),
         signal: controller.signal,
       });
 
@@ -98,7 +116,7 @@ export function ChatDemo({ model }: ChatDemoProps) {
       }
 
       setStatus("idle");
-      setMessage("Streaming complete.");
+      setMessage(mode === "responses" ? "Responses stream complete." : "Streaming complete.");
     } catch (error) {
       if (controller.signal.aborted) {
         setMessage("Stream cancelled.");
@@ -134,6 +152,11 @@ export function ChatDemo({ model }: ChatDemoProps) {
             <span>Model</span>
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-white/60">
               {model || MODEL_NAME}
+            </span>
+          </div>
+          <div className="text-[10px] uppercase tracking-[0.14em] text-white/40">
+            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-white/60">
+              {mode === "responses" ? "Responses API" : "Chat completions"}
             </span>
           </div>
 
