@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChatDemo, ChatApiMode } from "@/components/chat-demo";
+import { ChatDemo, ChatApiMode, ResponsesOptions } from "@/components/chat-demo";
+import { ResponsesExtras } from "@/components/responses-extras";
 import { StructuredOutputDemo } from "@/components/structured-demo";
 import { Input } from "@/components/ui/input";
 import { MODEL_NAME } from "@/config/model";
@@ -9,7 +10,12 @@ import { buildSnippets } from "@/config/snippets";
 
 export default function Home() {
   const [model, setModel] = useState<string>(MODEL_NAME);
-  const [apiMode, setApiMode] = useState<ChatApiMode>("chat");
+  const [apiMode, setApiMode] = useState<ChatApiMode>("responses");
+  const [responsesOptions, setResponsesOptions] = useState<ResponsesOptions>({
+    toolsText: "",
+    toolChoiceText: "",
+    mcpText: "",
+  });
   const activeModel = useMemo(() => (model.trim() ? model.trim() : MODEL_NAME), [model]);
 
   const snippets = useMemo(() => buildSnippets(apiMode, activeModel), [apiMode, activeModel]);
@@ -63,7 +69,7 @@ export default function Home() {
 
         <div className="space-y-12">
           <section className="mx-auto w-full max-w-2xl space-y-4 text-left">
-            <ChatDemo model={activeModel} mode={apiMode} />
+            <ChatDemo model={activeModel} mode={apiMode} responsesOptions={responsesOptions} />
             <details className="group rounded-xl border border-white/10 bg-[#151823] p-4">
               <summary className="flex cursor-pointer list-none items-center justify-between text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
                 <span>{apiMode === "responses" ? "Responses snippet" : "Chat completions snippet"}</span>
@@ -91,6 +97,14 @@ export default function Home() {
               </div>
             </details>
           </section>
+
+          {apiMode === "responses" ? (
+            <ResponsesExtras
+              model={activeModel}
+              options={responsesOptions}
+              onChange={setResponsesOptions}
+            />
+          ) : null}
         </div>
       </div>
     </main>

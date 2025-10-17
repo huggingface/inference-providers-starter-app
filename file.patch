@@ -1,0 +1,548 @@
+diff --git a/src/app/api/responses/route.ts b/src/app/api/responses/route.ts
+index d595d6741b5cc44e30e231217341186b0ebb9f68..d33f5fd26df2e981dd12646cf8fc231d8aaab84d 100644
+--- a/src/app/api/responses/route.ts
++++ b/src/app/api/responses/route.ts
+@@ -1,57 +1,100 @@
+ import { NextRequest } from "next/server";
+ import { APIError } from "openai/error";
+ import { getHfClient, resolveModel } from "@/server/openai";
+ import { readJson } from "@/server/request";
+ import { jsonError } from "@/server/http";
+ import { streamText } from "@/server/streaming";
+ 
+ export const runtime = "nodejs";
+ 
+ export async function POST(req: NextRequest) {
+   const clientResult = getHfClient();
+   if (!clientResult.ok) {
+     return clientResult.response;
+   }
+ 
+-  const payloadResult = await readJson<{ prompt?: unknown; model?: unknown }>(req);
++  const payloadResult = await readJson<{
++    prompt?: unknown;
++    model?: unknown;
++    tools?: unknown;
++    tool_choice?: unknown;
++    mcp?: unknown;
++  }>(req);
+   if (!payloadResult.ok) {
+     return payloadResult.response;
+   }
+ 
+-  const { prompt, model } = payloadResult.data ?? {};
++  const { prompt, model, tools, tool_choice, mcp } = payloadResult.data ?? {};
+ 
+   const promptText = typeof prompt === "string" ? prompt.trim() : "";
+ 
+   if (!promptText) {
+     return jsonError(400, "Provide a prompt string.");
+   }
+ 
++  const parseJsonInput = (value: unknown, field: string) => {
++    if (value === null || value === undefined) {
++      return undefined;
++    }
++    if (typeof value === "string") {
++      const trimmed = value.trim();
++      if (!trimmed) {
++        return undefined;
++      }
++      try {
++        return JSON.parse(trimmed);
++      } catch {
++        throw new Error(`Invalid JSON in ${field}.`);
++      }
++    }
++    if (typeof value === "object") {
++      return value;
++    }
++    throw new Error(`Invalid ${field}.`);
++  };
++
++  let parsedTools: unknown;
++  let parsedToolChoice: unknown;
++  let parsedMcp: unknown;
++
++  try {
++    parsedTools = parseJsonInput(tools, "tools");
++    parsedToolChoice = parseJsonInput(tool_choice, "tool_choice");
++    parsedMcp = parseJsonInput(mcp, "mcp");
++  } catch (error) {
++    const message = error instanceof Error ? error.message : "Invalid request payload.";
++    return jsonError(400, message);
++  }
++
+   try {
+     const stream = await clientResult.client.responses.stream({
+       model: resolveModel(model),
+       input: promptText,
++      ...(parsedTools ? { tools: parsedTools } : undefined),
++      ...(parsedToolChoice ? { tool_choice: parsedToolChoice } : undefined),
++      ...(parsedMcp ? { mcp: parsedMcp } : undefined),
+     });
+     let latestSnapshot = "";
+     let emittedAny = false;
+ 
+     const readableStream = streamText({
+       req,
+       iterator: stream,
+       cancel: () => {
+         stream.controller.abort();
+       },
+       onChunk: (event, enqueue) => {
+         if (event.type === "response.output_text.delta") {
+           const snapshot = typeof (event as { snapshot?: unknown }).snapshot === "string"
+             ? (event as { snapshot: string }).snapshot
+             : null;
+           const delta = typeof (event as { delta?: unknown }).delta === "string"
+             ? (event as { delta: string }).delta
+             : null;
+ 
+           let chunk = delta ?? "";
+           if (!chunk && snapshot !== null) {
+             chunk = snapshot.slice(latestSnapshot.length);
+           }
+ 
+           if (snapshot !== null) {
+diff --git a/src/app/page.tsx b/src/app/page.tsx
+index 51051ab020360787642465af394b306d310e5181..a9f7b0b241f16f31d7a4f63bf2baa70918e0e871 100644
+--- a/src/app/page.tsx
++++ b/src/app/page.tsx
+@@ -1,37 +1,43 @@
+ "use client";
+ 
+ import { useMemo, useState } from "react";
+-import { ChatDemo, ChatApiMode } from "@/components/chat-demo";
++import { ChatDemo, ChatApiMode, ResponsesOptions } from "@/components/chat-demo";
++import { ResponsesExtras } from "@/components/responses-extras";
+ import { StructuredOutputDemo } from "@/components/structured-demo";
+ import { Input } from "@/components/ui/input";
+ import { MODEL_NAME } from "@/config/model";
+ import { buildSnippets } from "@/config/snippets";
+ 
+ export default function Home() {
+   const [model, setModel] = useState<string>(MODEL_NAME);
+-  const [apiMode, setApiMode] = useState<ChatApiMode>("chat");
++  const [apiMode, setApiMode] = useState<ChatApiMode>("responses");
++  const [responsesOptions, setResponsesOptions] = useState<ResponsesOptions>({
++    toolsText: "",
++    toolChoiceText: "",
++    mcpText: "",
++  });
+   const activeModel = useMemo(() => (model.trim() ? model.trim() : MODEL_NAME), [model]);
+ 
+   const snippets = useMemo(() => buildSnippets(apiMode, activeModel), [apiMode, activeModel]);
+ 
+   const toggleClass = (target: ChatApiMode) =>
+     `rounded-full px-3 py-1 text-[10px] font-medium uppercase tracking-[0.16em] transition ${
+       apiMode === target ? "bg-[#ffb100] text-[#1c1c1c]" : "text-white/50 hover:text-white"
+     }`;
+ 
+   return (
+     <main className="flex min-h-screen flex-col items-center px-4 py-16">
+       <div className="w-full max-w-2xl space-y-10 text-center sm:text-left">
+         <div className="space-y-4">
+           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/50">
+             Hugging Face Inference Providers
+           </p>
+           <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+             Use SoTA Open LLMs with the familiar OpenAI SDK
+           </h1>
+           <p className="text-sm text-white/60">
+             Choose an open LLM, then compare streaming text and structured output flows side by side.
+           </p>
+           <div className="text-left">
+             <label
+               htmlFor="model-input"
+@@ -41,58 +47,66 @@ export default function Home() {
+               <Input
+                 id="model-input"
+                 value={model}
+                 onChange={(event) => setModel(event.target.value)}
+                 placeholder={MODEL_NAME}
+                 aria-label="Model"
+                 className="flex-1"
+               />
+             </label>
+           </div>
+           <div className="flex flex-col gap-2 text-left sm:flex-row sm:items-center sm:justify-between">
+             <span className="text-[10px] uppercase tracking-[0.14em] text-white/40">API mode</span>
+             <div className="inline-flex rounded-full bg-white/10 p-1">
+               <button type="button" className={toggleClass("chat")} onClick={() => setApiMode("chat")}>
+                 Chat completions
+               </button>
+               <button type="button" className={toggleClass("responses")} onClick={() => setApiMode("responses")}>
+                 Responses
+               </button>
+             </div>
+           </div>
+         </div>
+ 
+         <div className="space-y-12">
+           <section className="mx-auto w-full max-w-2xl space-y-4 text-left">
+-            <ChatDemo model={activeModel} mode={apiMode} />
++            <ChatDemo model={activeModel} mode={apiMode} responsesOptions={responsesOptions} />
+             <details className="group rounded-xl border border-white/10 bg-[#151823] p-4">
+               <summary className="flex cursor-pointer list-none items-center justify-between text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
+                 <span>{apiMode === "responses" ? "Responses snippet" : "Chat completions snippet"}</span>
+                 <span className="text-xs text-white/30">toggle</span>
+               </summary>
+               <div className="mt-3">
+                 <pre className="whitespace-pre-wrap rounded-lg bg-[#10121a] p-4 text-xs leading-5 text-white/80">
+                   <code>{snippets.streaming}</code>
+                 </pre>
+               </div>
+             </details>
+           </section>
+ 
+           <section className="mx-auto w-full max-w-2xl space-y-4 text-left">
+             <StructuredOutputDemo model={activeModel} mode={apiMode} />
+             <details className="group rounded-xl border border-white/10 bg-[#151823] p-4">
+               <summary className="flex cursor-pointer list-none items-center justify-between text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
+                 <span>Structured snippet</span>
+                 <span className="text-xs text-white/30">toggle</span>
+               </summary>
+               <div className="mt-3">
+                 <pre className="whitespace-pre-wrap rounded-lg bg-[#10121a] p-4 text-xs leading-5 text-white/80">
+                   <code>{snippets.structured}</code>
+                 </pre>
+               </div>
+             </details>
+           </section>
++
++          {apiMode === "responses" ? (
++            <ResponsesExtras
++              model={activeModel}
++              options={responsesOptions}
++              onChange={setResponsesOptions}
++            />
++          ) : null}
+         </div>
+       </div>
+     </main>
+   );
+ }
+diff --git a/src/components/chat-demo.tsx b/src/components/chat-demo.tsx
+index 4923a6cd38a1ea06d7543cd443bcbe4debd6954c..5238cde86c374f7a9b24d1b394d63de8fac9f1ca 100644
+--- a/src/components/chat-demo.tsx
++++ b/src/components/chat-demo.tsx
+@@ -1,69 +1,83 @@
+ "use client";
+ 
+ import { useEffect, useState } from "react";
+ import { Button } from "@/components/ui/button";
+ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+ import { Label } from "@/components/ui/label";
+ import { Textarea } from "@/components/ui/textarea";
+ import { MODEL_NAME } from "@/config/model";
+ import { cn } from "@/lib/utils";
+ import { useStreamingRequest } from "@/hooks/useStreamingRequest";
+ 
+ export type ChatApiMode = "chat" | "responses";
+ 
++export interface ResponsesOptions {
++  toolsText: string;
++  toolChoiceText: string;
++  mcpText: string;
++}
++
+ interface ChatDemoProps {
+   model: string;
+   mode: ChatApiMode;
++  responsesOptions?: ResponsesOptions;
+ }
+ 
+-export function ChatDemo({ model, mode }: ChatDemoProps) {
++export function ChatDemo({ model, mode, responsesOptions }: ChatDemoProps) {
+   const [prompt, setPrompt] = useState(
+     "Give me a two sentence pitch for streaming via Hugging Face Inference Providers.",
+   );
+   const { response, status, message, submit, cancel, reset } = useStreamingRequest();
+   const completionMessage = mode === "responses" ? "Responses stream complete." : "Streaming complete.";
+ 
+   useEffect(() => {
+     reset();
+   }, [mode, reset]);
+ 
+   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+     event.preventDefault();
+     if (!prompt.trim()) {
+       return;
+     }
+ 
+     const effectiveModel = model || MODEL_NAME;
+     const isResponses = mode === "responses";
+ 
+     await submit({
+       endpoint: isResponses ? "/api/responses" : "/api/chat",
+       body: isResponses
+         ? {
+             prompt,
+             model: effectiveModel,
++            ...(responsesOptions?.toolsText?.trim()
++              ? { tools: responsesOptions.toolsText }
++              : undefined),
++            ...(responsesOptions?.toolChoiceText?.trim()
++              ? { tool_choice: responsesOptions.toolChoiceText }
++              : undefined),
++            ...(responsesOptions?.mcpText?.trim() ? { mcp: responsesOptions.mcpText } : undefined),
+           }
+         : {
+             messages: [
+               {
+                 role: "user" as const,
+                 content: prompt,
+               },
+             ],
+             model: effectiveModel,
+           },
+       completionMessage,
+     });
+   }
+   const handleCancel = () => cancel();
+ 
+   return (
+     <Card className="w-full max-w-2xl text-white">
+       <CardHeader>
+         <CardTitle>Streaming demo</CardTitle>
+         <CardDescription>Send a prompt. The response streams back token by token.</CardDescription>
+       </CardHeader>
+       <form onSubmit={handleSubmit}>
+         <CardContent className="space-y-6">
+           <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.14em] text-white/40">
+             <span>Model</span>
+diff --git a/src/components/responses-extras.tsx b/src/components/responses-extras.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..708af9b6ddbbe2d9606acb90145fb455cbebe208
+--- /dev/null
++++ b/src/components/responses-extras.tsx
+@@ -0,0 +1,124 @@
++"use client";
++
++import { ChangeEvent, useMemo } from "react";
++
++import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
++import { Label } from "@/components/ui/label";
++import { Textarea } from "@/components/ui/textarea";
++import { buildResponsesExtras } from "@/config/responses-extras";
++import { ResponsesOptions } from "./chat-demo";
++
++interface ResponsesExtrasProps {
++  model: string;
++  options: ResponsesOptions;
++  onChange: (options: ResponsesOptions) => void;
++}
++
++export function ResponsesExtras({ model, options, onChange }: ResponsesExtrasProps) {
++  const { toolCalling, mcpServer } = useMemo(() => buildResponsesExtras(model), [model]);
++
++  const handleChange = (key: keyof ResponsesOptions) =>
++    (event: ChangeEvent<HTMLTextAreaElement>) => {
++      onChange({
++        ...options,
++        [key]: event.target.value,
++      });
++    };
++
++  return (
++    <section className="mx-auto w-full max-w-2xl space-y-6 text-left">
++      <Card className="text-white">
++        <CardHeader>
++          <CardTitle>Tool calling with Responses API</CardTitle>
++          <CardDescription>
++            Detect function calls in the streamed events and execute your own tooling before returning a
++            final message.
++          </CardDescription>
++        </CardHeader>
++        <CardContent className="space-y-4">
++          <p className="text-xs text-white/60">
++            The Responses API emits <code>response.tool_calls</code> events you can intercept to call
++            external functions before submitting results back with <code>responses.submit_tool_outputs</code>.
++          </p>
++          <div className="space-y-2 text-xs text-white/60">
++            <Label htmlFor="responses-tools" className="text-[10px] uppercase tracking-[0.16em]">
++              Tools payload (JSON)
++            </Label>
++            <Textarea
++              id="responses-tools"
++              value={options.toolsText}
++              onChange={handleChange("toolsText")}
++              placeholder='[{ "type": "function", "name": "my_tool", ... }]'
++              className="min-h-[92px] text-xs"
++            />
++            <p>Paste the array of tools you want to expose to the model.</p>
++          </div>
++          <div className="space-y-2 text-xs text-white/60">
++            <Label htmlFor="responses-tool-choice" className="text-[10px] uppercase tracking-[0.16em]">
++              Tool choice (JSON)
++            </Label>
++            <Textarea
++              id="responses-tool-choice"
++              value={options.toolChoiceText}
++              onChange={handleChange("toolChoiceText")}
++              placeholder='{"type": "function", "function": { "name": "my_tool" }}'
++              className="min-h-[68px] text-xs"
++            />
++            <p>Optional. Provide a tool choice to require or disable tool calls.</p>
++          </div>
++          <details className="group rounded-xl border border-white/10 bg-[#151823] p-4">
++            <summary className="flex cursor-pointer list-none items-center justify-between text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
++              <span>Tool calling snippet</span>
++              <span className="text-xs text-white/30">toggle</span>
++            </summary>
++            <div className="mt-3">
++              <pre className="whitespace-pre-wrap rounded-lg bg-[#10121a] p-4 text-xs leading-5 text-white/80">
++                <code>{toolCalling}</code>
++              </pre>
++            </div>
++          </details>
++        </CardContent>
++      </Card>
++
++      <Card className="text-white">
++        <CardHeader>
++          <CardTitle>MCP server tools</CardTitle>
++          <CardDescription>
++            Attach Model Context Protocol servers so models can invoke rich tools like file browsers or
++            search directly from the Responses API.
++          </CardDescription>
++        </CardHeader>
++        <CardContent className="space-y-4">
++          <p className="text-xs text-white/60">
++            Register an MCP server and forward its advertised tools in your request. The Responses API
++            will call them just like first-party functions.
++          </p>
++          <div className="space-y-2 text-xs text-white/60">
++            <Label htmlFor="responses-mcp" className="text-[10px] uppercase tracking-[0.16em]">
++              MCP servers (JSON)
++            </Label>
++            <Textarea
++              id="responses-mcp"
++              value={options.mcpText}
++              onChange={handleChange("mcpText")}
++              placeholder='{"servers": [{ "name": "local-files", "version": "2024-05-16", "tools": [] }]}'
++              className="min-h-[92px] text-xs"
++            />
++            <p>Provide the <code>mcp</code> object with the servers you want to attach.</p>
++          </div>
++          <details className="group rounded-xl border border-white/10 bg-[#151823] p-4">
++            <summary className="flex cursor-pointer list-none items-center justify-between text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
++              <span>MCP snippet</span>
++              <span className="text-xs text-white/30">toggle</span>
++            </summary>
++            <div className="mt-3">
++              <pre className="whitespace-pre-wrap rounded-lg bg-[#10121a] p-4 text-xs leading-5 text-white/80">
++                <code>{mcpServer}</code>
++              </pre>
++            </div>
++          </details>
++        </CardContent>
++      </Card>
++    </section>
++  );
++}
+diff --git a/src/config/responses-extras.ts b/src/config/responses-extras.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..edb95c87e767bfcdae49bb3ff692067d691d815c
+--- /dev/null
++++ b/src/config/responses-extras.ts
+@@ -0,0 +1,97 @@
++function escapeBackticks(input: string) {
++  return input.replace(/`/g, "\\`");
++}
++
++export function buildResponsesExtras(model: string) {
++  const safeModel = escapeBackticks(model.trim() ? model : "");
++  const displayModel = safeModel || model;
++
++  return {
++    toolCalling: `import { OpenAI } from "openai";
++
++const client = new OpenAI({
++  baseURL: "https://router.huggingface.co/v1",
++  apiKey: process.env.HF_TOKEN,
++});
++
++async function getLocation(city) {
++  // call your own service, database, or API here
++  return { city, latitude: 48.8566, longitude: 2.3522 };
++}
++
++const response = await client.responses.create({
++  model: "${displayModel}",
++  input: [
++    {
++      role: "user",
++      content: [
++        { type: "text", text: "Find the latitude for Paris and explain the weather." },
++      ],
++    },
++  ],
++  tools: [
++    {
++      type: "function",
++      name: "get_location",
++      description: "Look up a city's coordinates",
++      parameters: {
++        type: "object",
++        properties: { city: { type: "string" } },
++        required: ["city"],
++      },
++    },
++  ],
++});
++
++for (const item of response.output ?? []) {
++  if (item.type === "tool_call") {
++    const args = JSON.parse(item.function.arguments ?? "{}");
++    const coordinates = await getLocation(args.city);
++
++    await client.responses.submitToolOutputs(response.id, {
++      tool_outputs: [
++        {
++          call_id: item.id,
++          output: JSON.stringify(coordinates),
++        },
++      ],
++    });
++  }
++}
++
++const final = await client.responses.retrieve(response.id);
++console.log(final.output_text);`,
++    mcpServer: `import { OpenAI } from "openai";
++import { WebSocketMCPClient } from "@modelcontextprotocol/sdk/client/websocket";
++
++const client = new OpenAI({
++  baseURL: "https://router.huggingface.co/v1",
++  apiKey: process.env.HF_TOKEN,
++});
++
++const mcp = new WebSocketMCPClient({
++  url: "ws://localhost:3001", // your MCP server
++});
++
++await mcp.connect();
++const tools = await mcp.listTools();
++
++const response = await client.responses.create({
++  model: "${displayModel}",
++  input: "Read the README title from this project.",
++  mcp: {
++    servers: [
++      {
++        name: "local-files",
++        version: mcp.protocolVersion,
++        tools,
++      },
++    ],
++  },
++});
++
++console.log(response.output_text);
++
++await mcp.close();`,
++  };
++}
+

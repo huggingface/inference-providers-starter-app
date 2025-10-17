@@ -13,12 +13,18 @@ export async function POST(req: NextRequest) {
     return clientResult.response;
   }
 
-  const payloadResult = await readJson<{ prompt?: unknown; model?: unknown }>(req);
+  const payloadResult = await readJson<{
+    prompt?: unknown;
+    model?: unknown;
+    tools?: unknown;
+    tool_choice?: unknown;
+    mcp?: unknown;
+  }>(req);
   if (!payloadResult.ok) {
     return payloadResult.response;
   }
 
-  const { prompt, model } = payloadResult.data ?? {};
+  const { prompt, model, tools, tool_choice, mcp } = payloadResult.data ?? {};
 
   const promptText = typeof prompt === "string" ? prompt.trim() : "";
 
@@ -26,10 +32,47 @@ export async function POST(req: NextRequest) {
     return jsonError(400, "Provide a prompt string.");
   }
 
+  const parseJsonInput = (value: unknown, field: string) => {
+    if (value === null || value === undefined) {
+      return undefined;
+    }
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return undefined;
+      }
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        throw new Error(`Invalid JSON in ${field}.`);
+      }
+    }
+    if (typeof value === "object") {
+      return value;
+    }
+    throw new Error(`Invalid ${field}.`);
+  };
+
+  let parsedTools: unknown;
+  let parsedToolChoice: unknown;
+  let parsedMcp: unknown;
+
+  try {
+    parsedTools = parseJsonInput(tools, "tools");
+    parsedToolChoice = parseJsonInput(tool_choice, "tool_choice");
+    parsedMcp = parseJsonInput(mcp, "mcp");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Invalid request payload.";
+    return jsonError(400, message);
+  }
+
   try {
     const stream = await clientResult.client.responses.stream({
       model: resolveModel(model),
       input: promptText,
+      ...(parsedTools ? { tools: parsedTools } : undefined),
+      ...(parsedToolChoice ? { tool_choice: parsedToolChoice } : undefined),
+      ...(parsedMcp ? { mcp: parsedMcp } : undefined),
     });
     let latestSnapshot = "";
     let emittedAny = false;

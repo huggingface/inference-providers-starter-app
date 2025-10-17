@@ -11,12 +11,19 @@ import { useStreamingRequest } from "@/hooks/useStreamingRequest";
 
 export type ChatApiMode = "chat" | "responses";
 
+export interface ResponsesOptions {
+  toolsText: string;
+  toolChoiceText: string;
+  mcpText: string;
+}
+
 interface ChatDemoProps {
   model: string;
   mode: ChatApiMode;
+  responsesOptions?: ResponsesOptions;
 }
 
-export function ChatDemo({ model, mode }: ChatDemoProps) {
+export function ChatDemo({ model, mode, responsesOptions }: ChatDemoProps) {
   const [prompt, setPrompt] = useState(
     "Give me a two sentence pitch for streaming via Hugging Face Inference Providers.",
   );
@@ -42,6 +49,13 @@ export function ChatDemo({ model, mode }: ChatDemoProps) {
         ? {
             prompt,
             model: effectiveModel,
+            ...(responsesOptions?.toolsText?.trim()
+              ? { tools: responsesOptions.toolsText }
+              : undefined),
+            ...(responsesOptions?.toolChoiceText?.trim()
+              ? { tool_choice: responsesOptions.toolChoiceText }
+              : undefined),
+            ...(responsesOptions?.mcpText?.trim() ? { mcp: responsesOptions.mcpText } : undefined),
           }
         : {
             messages: [
