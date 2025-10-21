@@ -17,29 +17,23 @@ interface StructuredState {
   schemaHint: string | null;
 }
 
+const createInitialState = (): StructuredState => ({
+  result: null,
+  raw: null,
+  status: "idle",
+  message: null,
+  schemaHint: null,
+});
+
 export function useStructuredRequest() {
-  const [state, setState] = useState<StructuredState>({
-    result: null,
-    raw: null,
-    status: "idle",
-    message: null,
-    schemaHint: null,
-  });
+  const [state, setState] = useState<StructuredState>(() => createInitialState());
 
   const reset = useCallback(() => {
-    setState({ result: null, raw: null, status: "idle", message: null, schemaHint: null });
+    setState(createInitialState());
   }, []);
 
   const submit = useCallback(async ({ endpoint, body }: SubmitArgs) => {
     if (state.status === "loading") {
-      return;
-    }
-
-    const promptPresent = typeof body === "object" && body !== null && "prompt" in (body as Record<string, unknown>)
-      ? typeof (body as { prompt?: unknown }).prompt === "string" && (body as { prompt?: string }).prompt.trim().length > 0
-      : true;
-
-    if (!promptPresent) {
       return;
     }
 
@@ -84,11 +78,8 @@ export function useStructuredRequest() {
         schemaHint: metaSchemaError || null,
       });
     } catch (error) {
-      if (error instanceof Error) {
-        setState({ result: null, raw: null, status: "error", message: error.message, schemaHint: null });
-      } else {
-        setState({ result: null, raw: null, status: "error", message: "Something went wrong.", schemaHint: null });
-      }
+      const message = error instanceof Error ? error.message : "Something went wrong.";
+      setState({ result: null, raw: null, status: "error", message, schemaHint: null });
     }
   }, [state.status]);
 

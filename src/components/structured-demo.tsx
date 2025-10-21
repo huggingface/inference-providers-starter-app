@@ -19,6 +19,7 @@ export function StructuredOutputDemo({ model, mode }: StructuredOutputDemoProps)
     "Summarize the streaming behavior for product managers, include the audience and two bullet takeaways.",
   );
   const { result, raw, status, message, schemaHint, submit, reset } = useStructuredRequest();
+  const effectiveModel = model.trim() || MODEL_NAME;
 
   useEffect(() => {
     reset();
@@ -30,10 +31,10 @@ export function StructuredOutputDemo({ model, mode }: StructuredOutputDemoProps)
       return;
     }
 
-    const effectiveModel = model || MODEL_NAME;
+    const endpoint = mode === "responses" ? "/api/responses/structured" : "/api/chat/structured";
     await submit({
-      endpoint: "/api/structured",
-      body: { prompt, model: effectiveModel, mode },
+      endpoint,
+      body: { prompt, model: effectiveModel },
     });
   }
 
@@ -52,7 +53,7 @@ export function StructuredOutputDemo({ model, mode }: StructuredOutputDemoProps)
           <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.14em] text-white/40">
             <span>Model</span>
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-white/60">
-              {model || MODEL_NAME}
+              {effectiveModel}
             </span>
           </div>
           <div className="text-[10px] uppercase tracking-[0.14em] text-white/40">

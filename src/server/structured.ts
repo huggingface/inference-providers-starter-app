@@ -1,6 +1,8 @@
 import { APIError } from "openai/error";
 import { OpenAI } from "openai";
 
+import { coalesceOutputText, coalesceParsedOutput } from "./output";
+
 const schema = {
   name: "streamingSummary",
   schema: {
@@ -23,87 +25,6 @@ const schema = {
 
 const SYSTEM_FALLBACK =
   "You are a helpful assistant that returns compact JSON matching this schema: { headline: string, audience: string, takeaways: string[] }. If you cannot comply, explain why.";
-
-function coalesceOutputText(payload: unknown): string | null {
-  if (!payload || typeof payload !== "object") {
-    return null;
-  }
-
-  const maybeOutputText = (payload as { output_text?: unknown }).output_text;
-  if (typeof maybeOutputText === "string" && maybeOutputText.trim().length > 0) {
-    return maybeOutputText;
-  }
-
-  const maybeOutput = (payload as { output?: unknown }).output;
-  if (Array.isArray(maybeOutput)) {
-    for (const item of maybeOutput) {
-      if (item && typeof item === "object" && "type" in item && (item as { type?: unknown }).type === "message") {
-        const contentList = (item as { content?: unknown }).content;
-        if (Array.isArray(contentList)) {
-          for (const part of contentList) {
-            if (
-              part &&
-              typeof part === "object" &&
-              (part as { type?: unknown }).type === "output_text" &&
-              typeof (part as { text?: unknown }).text === "string" &&
-              (part as { text: string }).text.trim().length > 0
-            ) {
-              return (part as { text: string }).text;
-            }
-          }
-        }
-      }
-    }
-  }
-
-  const maybeChoices = (payload as { choices?: unknown }).choices;
-  if (Array.isArray(maybeChoices)) {
-    for (const choice of maybeChoices) {
-      const message = choice && typeof choice === "object" ? (choice as { message?: unknown }).message : undefined;
-      const content = message && typeof message === "object" ? (message as { content?: unknown }).content : undefined;
-      if (typeof content === "string" && content.trim().length > 0) {
-        return content;
-      }
-    }
-  }
-
-  return null;
-}
-
-function coalesceParsedOutput(payload: unknown): unknown | null {
-  if (!payload || typeof payload !== "object") {
-    return null;
-  }
-
-  const parsed = (payload as { output_parsed?: unknown }).output_parsed;
-  if (parsed !== undefined && parsed !== null) {
-    return parsed;
-  }
-
-  const maybeOutput = (payload as { output?: unknown }).output;
-  if (Array.isArray(maybeOutput)) {
-    for (const item of maybeOutput) {
-      if (item && typeof item === "object" && (item as { type?: unknown }).type === "message") {
-        const contentList = (item as { content?: unknown }).content;
-        if (Array.isArray(contentList)) {
-          for (const part of contentList) {
-            if (
-              part &&
-              typeof part === "object" &&
-              (part as { type?: unknown }).type === "output_text" &&
-              (part as { parsed?: unknown }).parsed !== undefined &&
-              (part as { parsed?: unknown }).parsed !== null
-            ) {
-              return (part as { parsed: unknown }).parsed;
-            }
-          }
-        }
-      }
-    }
-  }
-
-  return null;
-}
 
 export type StructuredApiMode = "chat" | "responses";
 
@@ -206,10 +127,9 @@ export async function runStructuredRequest({ client, prompt, model, mode }: Stru
 
   const resolvedContent = coalesceOutputText(completion);
   const parsedCandidate = mode === "responses" ? coalesceParsedOutput(completion) : null;
-
-  if (!resolvedContent && parsedCandidate == null) {
-    throw new Error("The model returned an empty response.");
-  }
+  const fallbackRaw =
+    resolvedContent ??
+    (completion && typeof completion === "object" ? JSON.stringify(completion, null, 2) : null);
 
   let parsed: unknown = parsedCandidate ?? undefined;
   let parsedSuccessfully = parsedCandidate != null;
@@ -225,9 +145,13 @@ export async function runStructuredRequest({ client, prompt, model, mode }: Stru
     }
   }
 
+  if (!parsedSuccessfully && fallbackRaw == null) {
+    throw new Error("The model returned an empty response.");
+  }
+
   return {
     data: parsedSuccessfully ? parsed : null,
-    raw: parsedSuccessfully ? undefined : resolvedContent,
+    raw: parsedSuccessfully ? undefined : fallbackRaw ?? undefined,
     meta: {
       model,
       usedSchema,
@@ -240,8 +164,4 @@ export async function runStructuredRequest({ client, prompt, model, mode }: Stru
         : "Model could not return JSON for the schema. Try a model with structured output support.",
     },
   };
-}
-
-export function resolveStructuredMode(value: unknown): StructuredApiMode {
-  return value === "responses" ? "responses" : "chat";
 }

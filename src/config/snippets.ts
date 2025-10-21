@@ -1,6 +1,11 @@
 import type { ChatApiMode } from "@/components/chat-demo";
 
-const snippetBuilders: Record<ChatApiMode, { streaming: (model: string) => string; structured: (model: string) => string }> = {
+type SnippetPair = {
+  streaming: (model: string) => string;
+  structured: (model: string) => string;
+};
+
+const snippetBuilders: Record<ChatApiMode, SnippetPair> = {
   responses: {
     streaming: (model) => `import { OpenAI } from "openai";
 
@@ -11,15 +16,23 @@ const client = new OpenAI({
 
 const stream = await client.responses.stream({
   model: "${model}",
-  input: "Explain streaming."
+  input: "Explain streaming.",
 });
 
 for await (const event of stream) {
   if (event.type === "response.output_text.delta") {
-    process.stdout.write(event.delta);
+    process.stdout.write(event.delta ?? "");
   }
-}`,
-    structured: (model) => `// reuse the same client config as above
+}
+
+await stream.finalResponse();`,
+    structured: (model) => `import { OpenAI } from "openai";
+
+const client = new OpenAI({
+  baseURL: "https://router.huggingface.co/v1",
+  apiKey: process.env.HF_TOKEN,
+});
+
 const result = await client.responses.create({
   model: "${model}",
   input: "Summarize the talk for PMs.",
@@ -33,7 +46,12 @@ const result = await client.responses.create({
         properties: {
           headline: { type: "string" },
           audience: { type: "string" },
-          takeaways: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 4 },
+          takeaways: {
+            type: "array",
+            items: { type: "string" },
+            minItems: 2,
+            maxItems: 4,
+          },
         },
         required: ["headline", "audience", "takeaways"],
       },
@@ -61,7 +79,13 @@ const stream = await client.chat.completions.create({
 for await (const chunk of stream) {
   process.stdout.write(chunk.choices[0]?.delta?.content ?? "");
 }`,
-    structured: (model) => `// reuse the same client config as above
+    structured: (model) => `import { OpenAI } from "openai";
+
+const client = new OpenAI({
+  baseURL: "https://router.huggingface.co/v1",
+  apiKey: process.env.HF_TOKEN,
+});
+
 const result = await client.chat.completions.create({
   model: "${model}",
   messages: [
@@ -76,7 +100,11 @@ const result = await client.chat.completions.create({
         type: "object",
         properties: {
           headline: { type: "string" },
-          takeaways: { type: "array", items: { type: "string" }, minItems: 2 },
+          takeaways: {
+            type: "array",
+            items: { type: "string" },
+            minItems: 2,
+          },
         },
         required: ["headline", "takeaways"],
       },
@@ -96,8 +124,9 @@ function escapeBackticks(model: string) {
 export function buildSnippets(mode: ChatApiMode, model: string) {
   const escapedModel = escapeBackticks(model.trim() ? model : "");
   const builder = snippetBuilders[mode];
+  const value = escapedModel || model;
   return {
-    streaming: builder.streaming(escapedModel || model),
-    structured: builder.structured(escapedModel || model),
+    streaming: builder.streaming(value),
+    structured: builder.structured(value),
   };
 }

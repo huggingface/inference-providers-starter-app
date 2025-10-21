@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -11,78 +12,102 @@ import { useStreamingRequest } from "@/hooks/useStreamingRequest";
 
 export type ChatApiMode = "chat" | "responses";
 
-export interface ResponsesOptions {
-  toolsText: string;
-  toolChoiceText: string;
-  mcpText: string;
-}
-
 interface ChatDemoProps {
   model: string;
   mode: ChatApiMode;
-  responsesOptions?: ResponsesOptions;
+  title?: string;
+  description?: string;
+  initialPrompt?: string;
+  promptPlaceholder?: string;
+  completionMessage?: string;
 }
 
-export function ChatDemo({ model, mode, responsesOptions }: ChatDemoProps) {
-  const [prompt, setPrompt] = useState(
-    "Give me a two sentence pitch for streaming via Hugging Face Inference Providers.",
-  );
+function defaultPrompt(mode: ChatApiMode) {
+  if (mode === "responses") {
+    return "Give me a two sentence pitch for streaming via Hugging Face Inference Providers.";
+  }
+  return "Explain how streaming works for Hugging Face Inference Providers.";
+}
+
+export function ChatDemo({
+  model,
+  mode,
+  title,
+  description,
+  initialPrompt,
+  promptPlaceholder,
+  completionMessage,
+}: ChatDemoProps) {
+  const [prompt, setPrompt] = useState(initialPrompt ?? defaultPrompt(mode));
   const { response, status, message, submit, cancel, reset } = useStreamingRequest();
-  const completionMessage = mode === "responses" ? "Responses stream complete." : "Streaming complete.";
+
+  const effectiveModel = model.trim() || MODEL_NAME;
+  const resolvedTitle = title ?? (mode === "responses" ? "Responses streaming demo" : "Chat completions streaming demo");
+  const resolvedDescription =
+    description ??
+    (mode === "responses"
+      ? "Send a prompt to the Responses API and watch the text stream back."
+      : "Stream a completion from the Chat Completions API.");
+  const resolvedCompletionMessage =
+    completionMessage ?? (mode === "responses" ? "Responses stream complete." : "Streaming complete.");
+  const placeholder =
+    promptPlaceholder ??
+    (mode === "responses"
+      ? "Try: Give me three key ideas for teaching streaming inference."
+      : "Try: Outline three benefits of streaming completions.");
 
   useEffect(() => {
     reset();
-  }, [mode, reset]);
+    setPrompt(initialPrompt ?? defaultPrompt(mode));
+  }, [mode, initialPrompt, reset]);
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!prompt.trim()) {
-      return;
-    }
+  const handleSubmit = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const trimmedPrompt = prompt.trim();
+      if (!trimmedPrompt) {
+        return;
+      }
 
-    const effectiveModel = model || MODEL_NAME;
-    const isResponses = mode === "responses";
+      const endpoint = mode === "responses" ? "/api/responses/stream" : "/api/chat/stream";
 
-    await submit({
-      endpoint: isResponses ? "/api/responses" : "/api/chat",
-      body: isResponses
-        ? {
-            prompt,
-            model: effectiveModel,
-            ...(responsesOptions?.toolsText?.trim()
-              ? { tools: responsesOptions.toolsText }
-              : undefined),
-            ...(responsesOptions?.toolChoiceText?.trim()
-              ? { tool_choice: responsesOptions.toolChoiceText }
-              : undefined),
-            ...(responsesOptions?.mcpText?.trim() ? { mcp: responsesOptions.mcpText } : undefined),
-          }
-        : {
-            messages: [
-              {
-                role: "user" as const,
-                content: prompt,
-              },
-            ],
-            model: effectiveModel,
-          },
-      completionMessage,
-    });
-  }
-  const handleCancel = () => cancel();
+      await submit({
+        endpoint,
+        body:
+          mode === "responses"
+            ? {
+                prompt: trimmedPrompt,
+                model: effectiveModel,
+              }
+          : {
+              messages: [
+                {
+                  role: "user" as const,
+                  content: trimmedPrompt,
+                },
+              ],
+              model: effectiveModel,
+            },
+        completionMessage: resolvedCompletionMessage,
+      });
+    },
+    [mode, prompt, effectiveModel, submit, resolvedCompletionMessage],
+  );
+
+  const handleCancel = useCallback(() => cancel(), [cancel]);
 
   return (
     <Card className="w-full max-w-2xl text-white">
       <CardHeader>
-        <CardTitle>Streaming demo</CardTitle>
-        <CardDescription>Send a prompt. The response streams back token by token.</CardDescription>
+        <CardTitle>{resolvedTitle}</CardTitle>
+        <CardDescription>{resolvedDescription}</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-6">
           <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.14em] text-white/40">
             <span>Model</span>
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-white/60">
-              {model || MODEL_NAME}
+              {effectiveModel}
             </span>
           </div>
           <div className="text-[10px] uppercase tracking-[0.14em] text-white/40">
@@ -92,12 +117,12 @@ export function ChatDemo({ model, mode, responsesOptions }: ChatDemoProps) {
           </div>
 
           <div className="space-y-3">
-            <Label htmlFor="prompt">Ask anything</Label>
+            <Label htmlFor={`prompt-${mode}`}>Prompt</Label>
             <Textarea
-              id="prompt"
+              id={`prompt-${mode}`}
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Try: Give me three key ideas for teaching streaming inference."
+              placeholder={placeholder}
               className="resize-none"
             />
           </div>
@@ -115,14 +140,7 @@ export function ChatDemo({ model, mode, responsesOptions }: ChatDemoProps) {
           </div>
 
           {message ? (
-            <p
-              className={cn(
-                "text-sm",
-                status === "error" ? "text-[#ff8080]" : "text-white/60",
-              )}
-            >
-              {message}
-            </p>
+            <p className={cn("text-sm", status === "error" ? "text-[#ff8080]" : "text-white/60")}>{message}</p>
           ) : null}
         </CardContent>
         <CardFooter className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -137,12 +155,7 @@ export function ChatDemo({ model, mode, responsesOptions }: ChatDemoProps) {
                 "Generate"
               )}
             </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={handleCancel}
-              disabled={status !== "streaming"}
-            >
+            <Button type="button" variant="ghost" onClick={handleCancel} disabled={status !== "streaming"}>
               Stop
             </Button>
           </div>
