@@ -16,12 +16,14 @@ interface StreamingState {
   message: string | null;
 }
 
+const createInitialState = (): StreamingState => ({
+  response: "",
+  status: "idle",
+  message: null,
+});
+
 export function useStreamingRequest() {
-  const [state, setState] = useState<StreamingState>({
-    response: "",
-    status: "idle",
-    message: null,
-  });
+  const [state, setState] = useState<StreamingState>(() => createInitialState());
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -30,37 +32,28 @@ export function useStreamingRequest() {
     };
   }, []);
 
-  const setPartialState = useCallback((partial: Partial<StreamingState>) => {
-    setState((current) => ({ ...current, ...partial }));
-  }, []);
-
   const cancel = useCallback(() => {
-    if (state.status === "streaming" && abortRef.current) {
-      abortRef.current.abort();
-      setPartialState({ status: "idle", message: "Stream cancelled." });
+    if (!abortRef.current) {
+      return;
     }
-  }, [setPartialState, state.status]);
+    abortRef.current.abort();
+    abortRef.current = null;
+    setState((current) =>
+      current.status === "streaming"
+        ? { ...current, status: "idle", message: "Stream cancelled." }
+        : current,
+    );
+  }, []);
 
   const reset = useCallback(() => {
     abortRef.current?.abort();
-    setState({ response: "", status: "idle", message: null });
+    abortRef.current = null;
+    setState(createInitialState());
   }, []);
 
   const submit = useCallback(
     async ({ endpoint, body, completionMessage }: SubmitArgs) => {
       if (state.status === "streaming") {
-        return;
-      }
-
-      const promptPresent = typeof body === "object" && body !== null && "prompt" in (body as Record<string, unknown>)
-        ? typeof (body as { prompt?: unknown }).prompt === "string" && (body as { prompt?: string }).prompt.trim().length > 0
-        : true;
-
-      const messagesPresent = typeof body === "object" && body !== null && "messages" in (body as Record<string, unknown>)
-        ? Array.isArray((body as { messages?: unknown }).messages) && (body as { messages?: unknown[] }).messages.length > 0
-        : true;
-
-      if (!promptPresent || !messagesPresent) {
         return;
       }
 
@@ -102,6 +95,9 @@ export function useStreamingRequest() {
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
+        let buffer = "";
+        let doneStreaming = false;
+        let streamErrored = false;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -109,29 +105,121 @@ export function useStreamingRequest() {
             break;
           }
 
-          const chunk = decoder.decode(value, { stream: true });
-          if (chunk) {
-            setState((current) => ({
-              ...current,
-              response: current.response + chunk,
-            }));
+          buffer += decoder.decode(value, { stream: true });
+
+          let separatorIndex: number;
+          while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
+            const rawEvent = buffer.slice(0, separatorIndex).trim();
+            buffer = buffer.slice(separatorIndex + 2);
+
+            if (!rawEvent) {
+              continue;
+            }
+
+            const dataLines = rawEvent
+              .split("\n")
+              .filter((line) => line.startsWith("data:"))
+              .map((line) => line.slice(5).trim());
+
+            if (dataLines.length === 0) {
+              continue;
+            }
+
+            const dataPayload = dataLines.join("\n");
+            if (dataPayload === "[DONE]") {
+              buffer = "";
+              doneStreaming = true;
+              break;
+            }
+
+            try {
+              const parsed = JSON.parse(dataPayload) as { event?: string; data?: unknown };
+              const eventType = parsed.event;
+              const eventData = parsed.data as Record<string, unknown> | undefined;
+
+              if (eventType === "error" || eventType === "response.error") {
+                const message =
+                  (eventData?.message as string | undefined) ??
+                  (eventData?.error as string | undefined) ??
+                  "Streaming request failed.";
+                streamErrored = true;
+                setState((current) => ({
+                  ...current,
+                  status: "error",
+                  message,
+                }));
+              } else if (eventType === "response.output_text.delta") {
+                const delta = typeof eventData?.delta === "string" ? eventData.delta : "";
+                if (delta) {
+                  setState((current) => ({
+                    ...current,
+                    response: current.response + delta,
+                  }));
+                }
+              } else if (eventType === "chat.completions.delta") {
+                const delta =
+                  typeof eventData?.delta === "string"
+                    ? eventData.delta
+                    : typeof eventData?.content === "string"
+                      ? eventData.content
+                      : typeof eventData?.text === "string"
+                        ? eventData.text
+                        : "";
+                if (delta) {
+                  setState((current) => ({
+                    ...current,
+                    response: current.response + delta,
+                  }));
+                }
+              } else if (eventType === "response.completed") {
+                const text =
+                  typeof eventData?.output_text === "string"
+                    ? eventData.output_text
+                    : "";
+                if (text) {
+                  setState((current) => ({
+                    ...current,
+                    response: current.response.endsWith(text) ? current.response : current.response + text,
+                  }));
+                }
+              }
+            } catch (error) {
+              console.error("Failed to parse SSE event", error);
+            }
+          }
+
+          if (doneStreaming) {
+            break;
           }
         }
 
-        setPartialState({ status: "idle", message: completionMessage });
+        if (!streamErrored) {
+          setState((current) => ({
+            ...current,
+            status: "idle",
+            message: completionMessage,
+          }));
+        }
       } catch (error) {
         if (controller.signal.aborted) {
-          setPartialState({ status: "idle", message: "Stream cancelled." });
-        } else if (error instanceof Error) {
-          setPartialState({ status: "error", message: error.message });
+          setState((current) => ({
+            ...current,
+            status: "idle",
+            message: "Stream cancelled.",
+          }));
         } else {
-          setPartialState({ status: "error", message: "Something went wrong." });
+          const message = error instanceof Error ? error.message : "Something went wrong.";
+          setState((current) => ({
+            ...current,
+            status: "error",
+            message,
+          }));
         }
       } finally {
         abortRef.current = null;
       }
     },
-    [setPartialState, state.status],
+    [state.status],
   );
 
   return {

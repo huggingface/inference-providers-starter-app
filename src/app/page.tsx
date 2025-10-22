@@ -1,27 +1,48 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ChatDemo, ChatApiMode } from "@/components/chat-demo";
+import { useState, type ReactNode } from "react";
+
+import { ChatDemo } from "@/components/chat-demo";
+import { McpDemo } from "@/components/mcp-demo";
+import { SnippetToggle } from "@/components/snippet-toggle";
 import { StructuredOutputDemo } from "@/components/structured-demo";
+import { ToolCallingDemo } from "@/components/tool-calling-demo";
 import { Input } from "@/components/ui/input";
 import { MODEL_NAME } from "@/config/model";
+import { buildResponsesExtras } from "@/config/responses-extras";
 import { buildSnippets } from "@/config/snippets";
+
+interface CapabilityProps {
+  title: string;
+  description: string;
+  snippetLabel: string;
+  snippetCode: string;
+  demo: ReactNode;
+}
+
+function Capability({ title, description, demo, snippetLabel, snippetCode }: CapabilityProps) {
+  return (
+    <article className="space-y-4 text-left">
+      <div className="space-y-1">
+        <h3 className="text-lg font-semibold text-white">{title}</h3>
+        <p className="text-sm text-white/60">{description}</p>
+      </div>
+      <div>{demo}</div>
+      <SnippetToggle label={snippetLabel} code={snippetCode} />
+    </article>
+  );
+}
 
 export default function Home() {
   const [model, setModel] = useState<string>(MODEL_NAME);
-  const [apiMode, setApiMode] = useState<ChatApiMode>("chat");
-  const activeModel = useMemo(() => (model.trim() ? model.trim() : MODEL_NAME), [model]);
-
-  const snippets = useMemo(() => buildSnippets(apiMode, activeModel), [apiMode, activeModel]);
-
-  const toggleClass = (target: ChatApiMode) =>
-    `rounded-full px-3 py-1 text-[10px] font-medium uppercase tracking-[0.16em] transition ${
-      apiMode === target ? "bg-[#ffb100] text-[#1c1c1c]" : "text-white/50 hover:text-white"
-    }`;
+  const activeModel = model.trim() || MODEL_NAME;
+  const chatSnippets = buildSnippets("chat", activeModel);
+  const responsesSnippets = buildSnippets("responses", activeModel);
+  const { toolCalling, mcpServer } = buildResponsesExtras(activeModel);
 
   return (
     <main className="flex min-h-screen flex-col items-center px-4 py-16">
-      <div className="w-full max-w-2xl space-y-10 text-center sm:text-left">
+      <div className="w-full max-w-2xl space-y-12 text-center sm:text-left">
         <div className="space-y-4">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/50">
             Hugging Face Inference Providers
@@ -30,7 +51,8 @@ export default function Home() {
             Use SoTA Open LLMs with the familiar OpenAI SDK
           </h1>
           <p className="text-sm text-white/60">
-            Choose an open LLM, then compare streaming text and structured output flows side by side.
+            Explore how to call Hugging Face-hosted models via the OpenAI SDK, complete with streaming, structured JSON,
+            tool calls, and MCP integrations.
           </p>
           <div className="text-left">
             <label
@@ -48,50 +70,85 @@ export default function Home() {
               />
             </label>
           </div>
-          <div className="flex flex-col gap-2 text-left sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-[10px] uppercase tracking-[0.14em] text-white/40">API mode</span>
-            <div className="inline-flex rounded-full bg-white/10 p-1">
-              <button type="button" className={toggleClass("chat")} onClick={() => setApiMode("chat")}>
-                Chat completions
-              </button>
-              <button type="button" className={toggleClass("responses")} onClick={() => setApiMode("responses")}>
-                Responses
-              </button>
-            </div>
+        </div>
+
+        <section className="space-y-8 text-left">
+          <div className="space-y-2">
+            <h2 className="text-xl font-semibold text-white">Responses API</h2>
+            <p className="text-sm text-white/60">
+              Showcase the unified Responses endpoint with streaming, tooling, and MCP support.
+            </p>
           </div>
-        </div>
+          <div className="space-y-10">
+            <Capability
+              title="Stream Responses"
+              description="Use responses.stream to deliver text as it is generated."
+              snippetLabel="Responses streaming snippet"
+              snippetCode={responsesSnippets.streaming}
+              demo={<ChatDemo model={activeModel} mode="responses" />}
+            />
+            <Capability
+              title="Structured Responses"
+              description="Lock the output to a JSON schema and surface raw fallbacks when parsing fails."
+              snippetLabel="Responses structured output snippet"
+              snippetCode={responsesSnippets.structured}
+              demo={<StructuredOutputDemo model={activeModel} mode="responses" />}
+            />
+            <Capability
+              title="Responses Tool Calling"
+              description="Provide function definitions and automatically submit tool outputs back to the model."
+              snippetLabel="Tool calling snippet"
+              snippetCode={toolCalling}
+              demo={<ToolCallingDemo model={activeModel} />}
+            />
+            <Capability
+              title="Responses with MCP"
+              description="Connect Model Context Protocol servers so the model can invoke remote tools mid-stream."
+              snippetLabel="MCP snippet"
+              snippetCode={mcpServer}
+              demo={<McpDemo model={activeModel} />}
+            />
+          </div>
+        </section>
 
-        <div className="space-y-12">
-          <section className="mx-auto w-full max-w-2xl space-y-4 text-left">
-            <ChatDemo model={activeModel} mode={apiMode} />
-            <details className="group rounded-xl border border-white/10 bg-[#151823] p-4">
-              <summary className="flex cursor-pointer list-none items-center justify-between text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
-                <span>{apiMode === "responses" ? "Responses snippet" : "Chat completions snippet"}</span>
-                <span className="text-xs text-white/30">toggle</span>
-              </summary>
-              <div className="mt-3">
-                <pre className="whitespace-pre-wrap rounded-lg bg-[#10121a] p-4 text-xs leading-5 text-white/80">
-                  <code>{snippets.streaming}</code>
-                </pre>
-              </div>
-            </details>
-          </section>
-
-          <section className="mx-auto w-full max-w-2xl space-y-4 text-left">
-            <StructuredOutputDemo model={activeModel} mode={apiMode} />
-            <details className="group rounded-xl border border-white/10 bg-[#151823] p-4">
-              <summary className="flex cursor-pointer list-none items-center justify-between text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
-                <span>Structured snippet</span>
-                <span className="text-xs text-white/30">toggle</span>
-              </summary>
-              <div className="mt-3">
-                <pre className="whitespace-pre-wrap rounded-lg bg-[#10121a] p-4 text-xs leading-5 text-white/80">
-                  <code>{snippets.structured}</code>
-                </pre>
-              </div>
-            </details>
-          </section>
-        </div>
+        <section className="space-y-8 text-left">
+          <div className="space-y-2">
+            <h2 className="text-xl font-semibold text-white">Chat Completions API</h2>
+            <p className="text-sm text-white/60">
+              Focus on conversational flows with OpenAI-compatible chat endpoints.
+            </p>
+          </div>
+          <div className="space-y-10">
+            <Capability
+              title="Stream Chat Completions"
+              description="Send chat messages and watch tokens arrive incrementally over a streaming connection."
+              snippetLabel="Chat completions streaming snippet"
+              snippetCode={chatSnippets.streaming}
+              demo={
+                <ChatDemo
+                  model={activeModel}
+                  mode="chat"
+                  title="Chat streaming demo"
+                  description="Stream tokens directly from the Chat Completions API."
+                  initialPrompt="Explain how streaming completions differ from Responses API streaming."
+                  promptPlaceholder="Try: Summarize why you might still want chat completions."
+                />
+              }
+            />
+            <Capability
+              title="Structured Chat Output"
+              description="Enforce JSON responses from chat completions using response_format."
+              snippetLabel="Chat structured output snippet"
+              snippetCode={chatSnippets.structured}
+              demo={
+                <StructuredOutputDemo
+                  model={activeModel}
+                  mode="chat"
+                />
+              }
+            />
+          </div>
+        </section>
       </div>
     </main>
   );
