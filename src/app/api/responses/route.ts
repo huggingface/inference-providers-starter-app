@@ -42,8 +42,8 @@ export async function POST(req: NextRequest) {
       },
       onChunk: (event, enqueue) => {
         if (event.type === "response.output_text.delta") {
-          const snapshot = typeof (event as { snapshot?: unknown }).snapshot === "string"
-            ? (event as { snapshot: string }).snapshot
+          const snapshot = typeof (event as unknown as { snapshot?: unknown }).snapshot === "string"
+            ? (event as unknown as { snapshot: string }).snapshot
             : null;
           const delta = typeof (event as { delta?: unknown }).delta === "string"
             ? (event as { delta: string }).delta
@@ -65,8 +65,8 @@ export async function POST(req: NextRequest) {
             emittedAny = true;
           }
         } else if (event.type === "response.output_text.done") {
-          const snapshot = typeof (event as { snapshot?: unknown }).snapshot === "string"
-            ? (event as { snapshot: string }).snapshot
+          const snapshot = typeof (event as unknown as { snapshot?: unknown }).snapshot === "string"
+            ? (event as unknown as { snapshot: string }).snapshot
             : null;
           if (snapshot && snapshot.length > latestSnapshot.length) {
             const chunk = snapshot.slice(latestSnapshot.length);
@@ -74,8 +74,9 @@ export async function POST(req: NextRequest) {
             latestSnapshot = snapshot;
             emittedAny = true;
           }
-        } else if (event.type === "response.error") {
-          const message = event.error?.message ?? "Streaming error.";
+        } else if ((event as unknown as { type: string; error?: { message?: string } }).type === "response.error") {
+          const { error } = event as unknown as { error?: { message?: string } };
+          const message = error?.message ?? "Streaming error.";
           enqueue(`\n[Stream error] ${message}`);
         }
       },
