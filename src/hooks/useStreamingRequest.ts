@@ -52,13 +52,21 @@ export function useStreamingRequest() {
         return;
       }
 
-      const promptPresent = typeof body === "object" && body !== null && "prompt" in (body as Record<string, unknown>)
-        ? typeof (body as { prompt?: unknown }).prompt === "string" && (body as { prompt?: string }).prompt.trim().length > 0
-        : true;
+      const promptPresent =
+        typeof body === "object" &&
+        body !== null &&
+        "prompt" in (body as Record<string, unknown>)
+          ? typeof (body as { prompt?: unknown }).prompt === "string" &&
+            ((body as { prompt?: string }).prompt?.trim()?.length ?? 0) > 0
+          : true;
 
-      const messagesPresent = typeof body === "object" && body !== null && "messages" in (body as Record<string, unknown>)
-        ? Array.isArray((body as { messages?: unknown }).messages) && (body as { messages?: unknown[] }).messages.length > 0
-        : true;
+      const messagesPresent =
+        typeof body === "object" &&
+        body !== null &&
+        "messages" in (body as Record<string, unknown>)
+          ? Array.isArray((body as { messages?: unknown }).messages) &&
+            ((body as { messages?: unknown[] }).messages?.length ?? 0) > 0
+          : true;
 
       if (!promptPresent || !messagesPresent) {
         return;

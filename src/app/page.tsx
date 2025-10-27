@@ -24,7 +24,7 @@ export default function Home() {
       <div className="w-full max-w-2xl space-y-10 text-center sm:text-left">
         <div className="space-y-4">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/50">
-            Hugging Face Inference Providers
+            🤗 Hugging Face Inference Providers
           </p>
           <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
             Use SoTA Open LLMs with the familiar OpenAI SDK

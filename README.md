@@ -1,6 +1,20 @@
 # Hugging Face Inference Providers Starter App
 
-Minimal Next.js + shadcn template that demonstrates how to stream chat completions **and** Responses API output from the Hugging Face Inference Provider router with the official OpenAI SDK. Use this project as a launchpad for richer demos (structured outputs, function calling, tools) while keeping the streaming and schema primitives identical to production code.
+Minimal `Next.js` + `shadcn` template that demonstrates how to stream chat completions **and** Responses API output from the Hugging Face Inference Provider router with the official OpenAI SDK. Use this project as a launchpad for richer demos (structured outputs, function calling, tools) while keeping the streaming and schema primitives identical to production code.
+
+## Prerequisites
+
+```yaml
+node.js: 20.19.4
+```
+
+`.env` file:
+
+```dotenv
+HF_TOKEN=
+```
+
+![Use SoTA Open LLMs with the familiar OpenAI SDK](screenshot.png)
 
 ## Quick start
 

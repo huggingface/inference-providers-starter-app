@@ -36,7 +36,7 @@ export function useStructuredRequest() {
     }
 
     const promptPresent = typeof body === "object" && body !== null && "prompt" in (body as Record<string, unknown>)
-      ? typeof (body as { prompt?: unknown }).prompt === "string" && (body as { prompt?: string }).prompt.trim().length > 0
+      ? typeof (body as { prompt?: unknown }).prompt === "string" && ((body as { prompt?: string }).prompt?.trim().length ?? 0) > 0
       : true;
 
     if (!promptPresent) {
