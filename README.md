@@ -8,6 +8,8 @@ Minimal `Next.js` + `shadcn` template that demonstrates how to stream chat compl
 node.js: 20.19.4
 ```
 
+`.env` file:
+
 ```dotenv
 HF_TOKEN=
 ```
